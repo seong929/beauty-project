@@ -1,0 +1,29 @@
+from fastapi import FastAPI
+
+from routers.admin.admin import router as admin_router
+from routers.delivery.delivery import router as delivery_router
+
+app = FastAPI(
+    title="온라인 화장품 판매 및 유통 관리 시스템",
+    description="자율 팀 프로젝트",
+    version="1.0.0",
+)
+
+app.include_router(admin_router)
+app.include_router(delivery_router)
+
+
+@app.get("/")
+def home():
+    return {"message": "FastAPI 서버 정상 실행"}
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
