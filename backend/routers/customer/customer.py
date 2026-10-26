@@ -21,44 +21,52 @@ def delivery_test():
 # 고객 등록(회원 가입)
 @router.post("/customers_upload", tags=["고객 관리"], summary="고객 등록")
 def customeres_upload(
-    login_id: str = Form(..., ),
-    password: str = Form(..., ),
-    customer_name: str = Form(...,),
-    email: str = Form(...,),
-    address: str = Form(...,),
-    phone_number: str = Form("",)
+    login_id: str = Form(..., min_length=1),
+    password: str = Form(..., min_length=1),
+    customer_name: str = Form(..., min_length=1),
+    email: str = Form(..., min_length=1),
+    address: str = Form(..., min_length=1),
+    phone_number: str = Form(..., min_length=1),
     ):
+
+    conn = None
 
     try:
         hashed_password = password_hasher.hash(password)
         conn = get_connection()
+        conn.begin()
 
         with conn.cursor() as curs:
-            sql = """
+            seq = next_sequence(curs, "customer")
+            customer_id = f"cus_{seq}"
+
+            curs.execute(
+                """
                 INSERT INTO customers (
+                    customer_id,
                     login_id,
                     password_hash,
                     customer_name,
                     email,
                     address,
-                    phone_number
+                    phone
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    customer_id,
+                    login_id,
+                    hashed_password,
+                    customer_name,
+                    email,
+                    address,
+                    phone_number,
+                ),
+            )
 
-            curs.execute(sql, (
-                login_id,
-                hashed_password,
-                customer_name,
-                email,
-                address,
-                phone_number or None,
-            ))
-
-            customer_id = curs.lastrowid
+            append_account_status(curs, customer_id, "ACTIVE")
 
         conn.commit()
-        conn.close()
 
         return {
             "result": "OK",
@@ -66,8 +74,26 @@ def customeres_upload(
             "customer_name": customer_name,
         }
 
-    except Exception as e:
-        return {'result' : 'Error'}
+    except pymysql.IntegrityError as exc:
+        if conn is not None:
+            conn.rollback()
+
+        if exc.args[0] == 1062:
+            raise HTTPException(
+                status_code=409,
+                detail="이미 사용 중인 아이디 또는 이메일입니다.",
+            ) from exc
+
+        raise
+
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
+
+    finally:
+        if conn is not None:
+            conn.close()
     
     
 # 고객 정보 조회
@@ -79,9 +105,9 @@ def customers_select():
             curs.execute(
                 """
                 SELECT customer_id,
-                    customer_name,
-                    phone AS phone_number,
-                    address
+                       customer_name,
+                       phone AS phone_number,
+                       address
                 FROM customers
                 ORDER BY customer_id
                 """
@@ -118,49 +144,55 @@ def customer_update(
                 SET customer_name = %s, email = %s, address = %s, phone = %s
                 WHERE customer_id = %s
                 """,
-                (customer_name,
-                email,
-                address,
-                phone_number,
-                customer_id),
+                (customer_name, email, address, phone_number, customer_id),
             )
         conn.commit()
-        conn.close()
-        return {"result": "OK",
-                "message": "고객 정보가 수정되었습니다."
-                }
-    except Exception as e:
-        return{'result' : 'Error'}
+        return {"result": "OK", "message": "고객 정보가 수정되었습니다."}
+    except pymysql.IntegrityError as exc:
+        if conn is not None:
+            conn.rollback()
+        if exc.args[0] == 1062:
+            raise HTTPException(409, "이미 사용 중인 이메일입니다.") from exc
+        raise
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
+    finally:
+        if conn is not None:
+            conn.close()
 
-
-
-
-# 고객 삭제
-@router.post("/customers_delect",tags=["고객 삭제"],
-                        summary="고객 휴먼 상태 및 회원 탈퇴",
-                        )
-async def customer_delect(
-    seq : int = Form(...)):
+# 고객 정보 삭제
+@router.post("/customers_delect", tags=["고객 삭제"], summary="회원 탈퇴")
+def customer_delect(
+    seq: str = Form(..., min_length=1, max_length=64, pattern=r"\S"),
+):
+    conn = None
     try:
         conn = get_connection()
-        curs = conn.cursor()
-        sql = """ UPDATE customers
-                    SET account_status = 'WITHDRAWN',
-                    withdrawn_at = NOW()
-                    WHERE customer_id = %s
-                    AND account_status <> 'WITHDRAWN'"""
-        curs.execute(sql, (seq))
+        conn.begin()
+        with conn.cursor() as curs:
+            # 주문과 동일하게 고객 행을 잠가 탈퇴와 주문이 교차하지 않게 한다.
+            curs.execute(
+                "SELECT customer_id FROM customers WHERE customer_id = %s FOR UPDATE",
+                (seq,),
+            )
+            if curs.fetchone() is None:
+                raise HTTPException(404, "존재하지 않는 고객입니다.")
+            if get_account_status(curs, seq) == "WITHDRAWN":
+                raise HTTPException(409, "이미 탈퇴한 회원입니다.")
+            append_account_status(curs, seq, "WITHDRAWN")
         conn.commit()
-        conn.close()
-        return{'result' : 'OK',
-                "message" : '고객이 없거나 이미 탈퇴한 회원입니다.'}
-    except Exception as e:
-        return{'result' : 'Error',
-                "message" : '회원 탈퇴가 처리되었습니다.'}
+        return {"result": "OK", "message": "회원 탈퇴가 처리되었습니다."}
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
+    finally:
+        if conn is not None:
+            conn.close()
 
 
-
-# 고객 상품 조회
 @router.get("/customers_categories_search", tags=["고객 상품 조회"], summary="고객 상품 조회")
 def customers_categories():
     conn = get_connection()

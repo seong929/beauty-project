@@ -168,8 +168,13 @@ class CustomerApiTests(unittest.TestCase):
         self.assert_rolled_back()
 
     def test_order_uses_database_price_and_string_ids(self):
-        self.cursor.fetchone.side_effect = [self.buyer, {"account_status": "ACTIVE"},
-                                           self.product, {"seq": 12}]
+        self.cursor.fetchone.side_effect = [
+            self.buyer,
+            {"account_status": "ACTIVE"},
+            self.product,
+            {"stock_quantity": 10},
+            {"seq": 12},
+        ]
         response = self.client.post("/orders", data=self.order_form)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["order_id"], "ord_12")
@@ -183,7 +188,7 @@ class CustomerApiTests(unittest.TestCase):
         self.conn.close.assert_called_once()
 
     def test_legacy_customer_without_history_can_order(self):
-        self.cursor.fetchone.side_effect = [self.buyer, None, self.product, {"seq": 1}]
+        self.cursor.fetchone.side_effect = [self.buyer, None, self.product, {"stock_quantity": 10}, {"seq": 1}]
         self.assertEqual(self.client.post("/orders", data=self.order_form).status_code, 200)
 
     def test_missing_or_withdrawn_customer_cannot_order(self):
@@ -211,15 +216,23 @@ class CustomerApiTests(unittest.TestCase):
                 self.assert_rolled_back()
 
     def test_insufficient_stock_does_not_save_order(self):
-        self.cursor.fetchone.side_effect = [self.buyer, {"account_status": "ACTIVE"}, self.product]
-        self.cursor.rowcount = 0
-        self.assertEqual(self.client.post("/orders", data=self.order_form).status_code, 409)
+        self.cursor.fetchone.side_effect = [self.buyer, {"account_status": "ACTIVE"}, self.product, {"stock_quantity": 1}]
+
+        response = self.client.post("/orders", data=self.order_form)
+
+        self.assertEqual(response.status_code, 409)
         self.assertFalse(self.executed("INSERT INTO orders"))
+        self.assertFalse(self.executed("UPDATE product_inventory"))
         self.assert_rolled_back()
 
     def test_order_item_failure_rolls_back_stock_and_order(self):
-        self.cursor.fetchone.side_effect = [self.buyer, {"account_status": "ACTIVE"},
-                                           self.product, {"seq": 1}]
+        self.cursor.fetchone.side_effect = [
+            self.buyer,
+            {"account_status": "ACTIVE"},
+            self.product,
+            {"stock_quantity": 10},
+            {"seq": 1},
+        ]
 
         def execute(sql, params=None):
             if "INSERT INTO order_items" in sql:
