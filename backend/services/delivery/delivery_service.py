@@ -1,0 +1,152 @@
+from database import get_connection
+from fastapi import HTTPException
+from schemas.delivery.delivery_schema import DeliveryStatusUpdateRequest
+
+
+# 배송 목록 조회
+def get_delivery_list():
+    conn = get_connection()
+
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                SELECT
+                    d.delivery_id,
+                    d.order_id,
+                    d.delivery_seq,
+                    c.carrier_name,
+                    o.shipping_address,
+                    o.ordered_at,
+                    d.delivery_status,
+                    d.shipped_at,
+                    d.arrived_at
+                FROM delivery_information AS d
+
+                JOIN carriers AS c
+                    ON d.carrier_id = c.carrier_id
+
+                JOIN orders AS o
+                    ON d.order_id = o.order_id
+
+                ORDER BY
+                    o.ordered_at DESC,
+                    d.delivery_seq DESC
+            """
+
+            cursor.execute(sql)
+            result = cursor.fetchall()
+
+        return result
+
+    finally:
+        conn.close()
+
+# 배송 상태 변경
+def update_delivery_status(
+    delivery_id: str,
+    data: DeliveryStatusUpdateRequest,
+):
+    conn = get_connection()
+
+    try:
+        with conn.cursor() as cursor:
+            # 1. 배송 정보 조회 및 잠금
+            cursor.execute(
+                """
+                SELECT delivery_status
+                FROM delivery_information
+                WHERE delivery_id = %s
+                FOR UPDATE
+                """,
+                (delivery_id,),
+            )
+
+            delivery = cursor.fetchone()
+
+            if delivery is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="존재하지 않는 배송 정보입니다.",
+                )
+
+            current_status = delivery["delivery_status"]
+            new_status = data.delivery_status
+
+            # 2. 허용되는 배송 상태 변경 규칙
+            allowed_transitions = {
+                "READY": {"IN_TRANSIT"},
+                "IN_TRANSIT": {
+                    "DELIVERED",
+                    "FAILED",
+                    "RETURNING",
+                },
+                "FAILED": {"RETURNING"},
+                "DELIVERED": set(),
+                "RETURNING": set(),
+            }
+
+            if new_status not in allowed_transitions.get(
+                current_status, set()
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"배송 상태를 {current_status}에서 "
+                        f"{new_status}(으)로 변경할 수 없습니다."
+                    ),
+                )
+
+            # 3. 배송 상태 및 일시 변경
+            if new_status == "IN_TRANSIT":
+                cursor.execute(
+                    """
+                    UPDATE delivery_information
+                    SET delivery_status = %s,
+                        shipped_at = NOW()
+                    WHERE delivery_id = %s
+                    """,
+                    (new_status, delivery_id),
+                )
+
+            elif new_status == "DELIVERED":
+                cursor.execute(
+                    """
+                    UPDATE delivery_information
+                    SET delivery_status = %s,
+                        arrived_at = NOW()
+                    WHERE delivery_id = %s
+                    """,
+                    (new_status, delivery_id),
+                )
+
+            else:
+                cursor.execute(
+                    """
+                    UPDATE delivery_information
+                    SET delivery_status = %s
+                    WHERE delivery_id = %s
+                    """,
+                    (new_status, delivery_id),
+                )
+
+            if cursor.rowcount != 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="배송 상태 변경에 실패했습니다.",
+                )
+
+        conn.commit()
+
+        return {
+            "delivery_id": delivery_id,
+            "previous_status": current_status,
+            "delivery_status": new_status,
+            "message": "배송 상태가 변경되었습니다.",
+        }
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

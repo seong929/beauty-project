@@ -22,7 +22,7 @@ def customers_categories():
         with conn.cursor() as curs:
             curs.execute(
                 """
-SELECT
+                    SELECT
                     c.cosmetic_id,
                     c.cosmetic_name,
                     m.manufacturer_name,
