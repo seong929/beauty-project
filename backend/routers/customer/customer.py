@@ -79,9 +79,9 @@ def customers_select():
             curs.execute(
                 """
                 SELECT customer_id,
-                       customer_name,
-                       phone AS phone_number,
-                       address
+                    customer_name,
+                    phone AS phone_number,
+                    address
                 FROM customers
                 ORDER BY customer_id
                 """
@@ -118,50 +118,141 @@ def customer_update(
                 SET customer_name = %s, email = %s, address = %s, phone = %s
                 WHERE customer_id = %s
                 """,
-                (customer_name, email, address, phone_number, customer_id),
+                (customer_name,
+                email,
+                address,
+                phone_number,
+                customer_id),
             )
         conn.commit()
-        return {"result": "OK", "message": "고객 정보가 수정되었습니다."}
-    except pymysql.IntegrityError as exc:
-        if conn is not None:
-            conn.rollback()
-        if exc.args[0] == 1062:
-            raise HTTPException(409, "이미 사용 중인 이메일입니다.") from exc
-        raise
-    except Exception:
-        if conn is not None:
-            conn.rollback()
-        raise
-    finally:
-        if conn is not None:
-            conn.close()
+        conn.close()
+        return {"result": "OK",
+                "message": "고객 정보가 수정되었습니다."
+                }
+    except Exception as e:
+        return{'result' : 'Error'}
 
-# 고객 정보 삭제
-@router.post("/customers_delect", tags=["고객 삭제"], summary="회원 탈퇴")
-def customer_delect(
-    seq: str = Form(..., min_length=1, max_length=64, pattern=r"\S"),
-):
-    conn = None
+
+
+
+# 고객 삭제
+@router.post("/customers_delect",tags=["고객 삭제"],
+                        summary="고객 휴먼 상태 및 회원 탈퇴",
+                        )
+async def customer_delect(
+    seq : int = Form(...)):
     try:
         conn = get_connection()
-        conn.begin()
-        with conn.cursor() as curs:
-            # 주문과 동일하게 고객 행을 잠가 탈퇴와 주문이 교차하지 않게 한다.
-            curs.execute(
-                "SELECT customer_id FROM customers WHERE customer_id = %s FOR UPDATE",
-                (seq,),
-            )
-            if curs.fetchone() is None:
-                raise HTTPException(404, "존재하지 않는 고객입니다.")
-            if get_account_status(curs, seq) == "WITHDRAWN":
-                raise HTTPException(409, "이미 탈퇴한 회원입니다.")
-            append_account_status(curs, seq, "WITHDRAWN")
+        curs = conn.cursor()
+        sql = """ UPDATE customers
+                    SET account_status = 'WITHDRAWN',
+                    withdrawn_at = NOW()
+                    WHERE customer_id = %s
+                    AND account_status <> 'WITHDRAWN'"""
+        curs.execute(sql, (seq))
         conn.commit()
-        return {"result": "OK", "message": "회원 탈퇴가 처리되었습니다."}
-    except Exception:
-        if conn is not None:
-            conn.rollback()
-        raise
+        conn.close()
+        return{'result' : 'OK',
+                "message" : '고객이 없거나 이미 탈퇴한 회원입니다.'}
+    except Exception as e:
+        return{'result' : 'Error',
+                "message" : '회원 탈퇴가 처리되었습니다.'}
+
+
+
+# 고객 상품 조회
+@router.get("/customers_categories_search", tags=["고객 상품 조회"], summary="고객 상품 조회")
+def customers_categories():
+    conn = get_connection()
+    try:
+        with conn.cursor() as curs:
+            curs.execute(
+                """
+SELECT
+                    c.cosmetic_id,
+                    c.cosmetic_name,
+                    m.manufacturer_name,
+                    cat.category_name,
+
+                    -- 최신 용량
+                    (
+                        SELECT vh.volume_text
+                        FROM cosmetic_volume_history AS vh
+                        WHERE vh.cosmetic_id = c.cosmetic_id
+                        ORDER BY
+                            vh.changed_on DESC,
+                            CAST(
+                                SUBSTRING_INDEX(vh.change_id, '_', -1)
+                                AS UNSIGNED
+                            ) DESC
+                        LIMIT 1
+                    ) AS volume_text,
+
+                    -- 최신 판매 가격
+                    (
+                        SELECT ph.sale_price
+                        FROM cosmetic_price_history AS ph
+                        WHERE ph.cosmetic_id = c.cosmetic_id
+                        ORDER BY
+                            ph.changed_on DESC,
+                            CAST(
+                                SUBSTRING_INDEX(ph.change_id, '_', -1)
+                                AS UNSIGNED
+                            ) DESC
+                        LIMIT 1
+                    ) AS sale_price,
+
+                    COALESCE(i.available_quantity, 0)
+                        AS available_quantity,
+
+                    CASE
+                        WHEN COALESCE(i.available_quantity, 0) > 0
+                            THEN '구매 가능'
+                        ELSE '품절'
+                    END AS availability
+
+                FROM cosmetics AS c
+
+                JOIN manufacturers AS m
+                    ON m.manufacturer_id = c.manufacturer_id
+
+                JOIN categories AS cat
+                    ON cat.category_id = c.category_id
+
+                -- 판매 가능한 입고별 재고 합산
+                LEFT JOIN (
+                    SELECT
+                        cosmetic_id,
+                        SUM(stock_quantity) AS available_quantity
+                    FROM product_inventory
+                    WHERE inventory_status = 'MAINTAIN'
+                    AND stock_quantity > 0
+                    AND (
+                        expires_on IS NULL
+                        OR expires_on >= CURDATE()
+                      )
+                    GROUP BY cosmetic_id
+                ) AS i
+                    ON i.cosmetic_id = c.cosmetic_id
+
+                -- 최신 판매 상태가 판매 중인 상품만 조회
+                WHERE (
+                    SELECT sh.sale_status
+                    FROM cosmetic_sale_status_history AS sh
+                    WHERE sh.cosmetic_id = c.cosmetic_id
+                    ORDER BY
+                        sh.changed_on DESC,
+                        CAST(
+                            SUBSTRING_INDEX(sh.change_id, '_', -1)
+                            AS UNSIGNED
+                        ) DESC
+                    LIMIT 1
+                ) = 'ON_SALE'
+
+                ORDER BY c.cosmetic_name, c.cosmetic_id
+                """
+            )
+            rows = curs.fetchall()
+        return {"result": rows}
     finally:
-        if conn is not None:
-            conn.close()
+        conn.close()
