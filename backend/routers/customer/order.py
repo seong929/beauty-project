@@ -128,25 +128,26 @@ def create_order(
 
 
 @router.get("/orders", summary="고객별 주문 조회")
-def get_orders(
-    customer_id: str = Query(..., min_length=1, max_length=64, pattern=r"\S"),
-):
+def get_orders(customer_id: str):
+    
     conn = get_connection()
+    
     try:
+        
         with conn.cursor() as curs:
             curs.execute(
                 """
                 SELECT o.order_id, o.ordered_at AS order_date,
-                       c.customer_id, c.customer_name,
-                       p.cosmetic_name AS product_name, oi.inventory_id,
-                       oi.purchase_quantity AS quantity,
-                       oi.purchase_unit_price AS unit_price,
+                    c.customer_id, c.customer_name,
+                    p.cosmetic_name AS product_name, oi.inventory_id,
+                    oi.purchase_quantity AS quantity,
+                    oi.purchase_unit_price AS unit_price,
                        oi.purchase_quantity * oi.purchase_unit_price AS item_amount,
-                       (
-                           SELECT SUM(items.purchase_quantity * items.purchase_unit_price)
-                           FROM order_items AS items WHERE items.order_id = o.order_id
-                       ) AS order_total_amount,
-                       o.order_status
+                    (
+                        SELECT SUM(items.purchase_quantity * items.purchase_unit_price)
+                        FROM order_items AS items WHERE items.order_id = o.order_id
+                    ) AS order_total_amount,
+                    o.order_status
                 FROM orders AS o
                 JOIN customers AS c ON c.customer_id = o.customer_id
                 JOIN order_items AS oi ON oi.order_id = o.order_id
