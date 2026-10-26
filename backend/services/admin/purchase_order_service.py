@@ -158,3 +158,41 @@ def create_purchase_order(data: PurchaseOrderCreateRequest):
 
     finally:
         conn.close()
+
+
+def get_purchase_order_list():
+    conn = get_connection()
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    po.purchase_order_id,
+                    po.approval_id,
+                    po.purchase_order_seq,
+                    po.manufacturer_id,
+                    m.manufacturer_name,
+                    a.cosmetic_id,
+                    c.cosmetic_name,
+                    po.ordered_on,
+                    po.order_quantity,
+                    po.purchase_status,
+                    po.unit_supply_price,
+                    po.order_total_amount
+                FROM purchase_orders AS po
+                JOIN approvals AS a
+                    ON po.approval_id = a.approval_id
+                JOIN cosmetics AS c
+                    ON a.cosmetic_id = c.cosmetic_id
+                JOIN manufacturers AS m
+                    ON po.manufacturer_id = m.manufacturer_id
+                ORDER BY po.ordered_on DESC,
+                         po.purchase_order_id DESC
+                """
+            )
+
+            return cursor.fetchall()
+
+    finally:
+        conn.close()
