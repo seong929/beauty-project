@@ -19,6 +19,7 @@ def reviews_upload(
         conn = get_connection()
 
         with conn.cursor() as curs:
+            review_id = f"rev_{next_sequence(curs, 'review')}"
             sql = """
                 INSERT INTO reviews (
                 review_id,
@@ -37,8 +38,6 @@ def reviews_upload(
                 review_content,
                 rating
             ))
-
-
         conn.commit()
         conn.close()
 
@@ -153,14 +152,14 @@ def reviews_update(
 
 # 리뷰 삭제
 @router.delete("/reviews_delete", tags=["리뷰 삭제"],summary="리뷰 삭제")
-async def reviews_delete(seq: int = Form(...)):
+async def reviews_delete(review_id: int = Form(...)):
     conn = None
     try:
         conn = get_connection()
         curs = conn.cursor()
         curs.execute(
             "DELETE FROM reviews WHERE review_id = %s",
-            (seq,),
+            (review_id,),
         )
 
         deleted_count = curs.rowcount
