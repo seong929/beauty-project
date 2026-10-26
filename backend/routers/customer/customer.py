@@ -21,44 +21,52 @@ def delivery_test():
 # 고객 등록(회원 가입)
 @router.post("/customers_upload", tags=["고객 관리"], summary="고객 등록")
 def customeres_upload(
-    login_id: str = Form(..., ),
-    password: str = Form(..., ),
-    customer_name: str = Form(...,),
-    email: str = Form(...,),
-    address: str = Form(...,),
-    phone_number: str = Form("",)
+    login_id: str = Form(..., min_length=1),
+    password: str = Form(..., min_length=1),
+    customer_name: str = Form(..., min_length=1),
+    email: str = Form(..., min_length=1),
+    address: str = Form(..., min_length=1),
+    phone_number: str = Form(..., min_length=1),
     ):
+
+    conn = None
 
     try:
         hashed_password = password_hasher.hash(password)
         conn = get_connection()
+        conn.begin()
 
         with conn.cursor() as curs:
-            sql = """
+            seq = next_sequence(curs, "customer")
+            customer_id = f"cus_{seq}"
+
+            curs.execute(
+                """
                 INSERT INTO customers (
+                    customer_id,
                     login_id,
                     password_hash,
                     customer_name,
                     email,
                     address,
-                    phone_number
+                    phone
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    customer_id,
+                    login_id,
+                    hashed_password,
+                    customer_name,
+                    email,
+                    address,
+                    phone_number,
+                ),
+            )
 
-            curs.execute(sql, (
-                login_id,
-                hashed_password,
-                customer_name,
-                email,
-                address,
-                phone_number or None,
-            ))
-
-            customer_id = curs.lastrowid
+            append_account_status(curs, customer_id, "ACTIVE")
 
         conn.commit()
-        conn.close()
 
         return {
             "result": "OK",
@@ -66,8 +74,26 @@ def customeres_upload(
             "customer_name": customer_name,
         }
 
-    except Exception as e:
-        return {'result' : 'Error'}
+    except pymysql.IntegrityError as exc:
+        if conn is not None:
+            conn.rollback()
+
+        if exc.args[0] == 1062:
+            raise HTTPException(
+                status_code=409,
+                detail="이미 사용 중인 아이디 또는 이메일입니다.",
+            ) from exc
+
+        raise
+
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
+
+    finally:
+        if conn is not None:
+            conn.close()
     
     
 # 고객 정보 조회

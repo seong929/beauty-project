@@ -67,14 +67,20 @@ def create_order(
             # ③ 현재 스키마에는 예약 수량이 없으므로 같은 트랜잭션에서 차감.
             curs.execute(
                 """
-                UPDATE product_inventory
-                SET stock_quantity = stock_quantity - %s
-                WHERE inventory_id = %s AND stock_quantity >= %s
+                SELECT stock_quantity
+                FROM product_inventory
+                WHERE inventory_id = %s
+                FOR UPDATE
                 """,
-                (quantity, inventory_id, quantity),
+                (inventory_id,),
             )
-            if curs.rowcount != 1:
-                raise HTTPException(409, "구매 가능한 재고수량이 부족합니다.")
+            stock = curs.fetchone()
+
+            if stock is None or stock["stock_quantity"] < quantity:
+                raise HTTPException(
+                    status_code=409,
+                    detail="구매 가능한 재고수량이 부족합니다.",
+                )
             total_amount = product["sale_price"] * quantity
 
             # ④ 주문 등록: 전역 순번으로 ord_<순번> 발급.
