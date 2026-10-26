@@ -13,6 +13,7 @@ router = APIRouter(
     "/cosmetics",
     response_model=CosmeticCreateResponse,
     status_code=201,
+    summary="화장품 등록",
 )
 def register_cosmetic(data: CosmeticCreateRequest):
     return create_cosmetic(data)
