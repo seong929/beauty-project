@@ -21,3 +21,11 @@
 ## 데이터베이스
 - Database Name: cosmetics_management
 - MySQL 8.0.16 이상
+
+## 고객·주문 API
+
+첨부 고객·주문 코드를 현재 스키마에 맞춰 `backend/routers/customer`에 이식했다.
+기존 API 경로와 폼 이름을 유지하며, `backend/main.py`에 라우터를 연결했다.
+
+실행 방법, API 입력, 스키마 변경 대응 및 검증 결과는
+[고객·주문 이식 검수](docs/customer_migration.md)를 참고한다.
