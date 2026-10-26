@@ -1,9 +1,9 @@
-from fastapi import HTTPException
+# 상품 ID 생성, 상품 등록
 
-from database import get_connection
 from datetime import date
-from schemas.admin.admin_schema import CosmeticCreateRequest
-
+from fastapi import HTTPException
+from database import get_connection
+from schemas.admin.cosmetic_schema import CosmeticCreateRequest
 
 def generate_cosmetic_id(
     cursor,

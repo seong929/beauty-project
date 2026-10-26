@@ -1,9 +1,6 @@
-
 from decimal import Decimal
 from typing import Literal
-
 from pydantic import BaseModel, Field, ConfigDict
-
 
 class CosmeticCreateRequest(BaseModel):
     model_config = ConfigDict(
@@ -71,7 +68,6 @@ class CosmeticCreateRequest(BaseModel):
         le=4294967295,
         description="목표 재고 수량",
     )
-
 
 class CosmeticCreateResponse(BaseModel):
     cosmetic_id: str

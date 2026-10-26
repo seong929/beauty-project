@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
-from routers.admin.admin import router as admin_router
+from routers.admin.cosmetic_router import router as cosmetic_router
+from routers.admin.approval_router import router as approval_router
 from routers.delivery.delivery import router as delivery_router
 
 app = FastAPI(
@@ -9,7 +10,8 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.include_router(admin_router)
+app.include_router(cosmetic_router)
+app.include_router(approval_router)
 app.include_router(delivery_router)
 
 
