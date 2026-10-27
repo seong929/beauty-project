@@ -4,15 +4,17 @@ import logging
 from enum import Enum
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 import services.staff.staff_inventory_service as staff_inventory_service
+from services.staff.staff_auth_service import require_staff
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/staff",
-    tags=["직원-재고"]
+    tags=["직원-재고"],
+    dependencies=[Depends(require_staff)]
 )
 
 

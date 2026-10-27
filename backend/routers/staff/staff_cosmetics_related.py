@@ -2,15 +2,17 @@
 import logging
 
 from typing import Annotated
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 
 import services.staff.staff_cosmetics_service as staff_cosmetics_service
+from services.staff.staff_auth_service import require_staff
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/staff",
-    tags=["직원-화장품"]
+    tags=["직원-화장품"],
+    dependencies=[Depends(require_staff)]
 )
 
 
