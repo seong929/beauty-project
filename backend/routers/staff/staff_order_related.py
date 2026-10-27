@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from schemas.staff.orders import (OrderListQuery, OrderListResponse)
+import schemas.staff.orders as order_schema
 import services.staff.staff_service as staff_service
 
 router = APIRouter(
@@ -10,10 +10,10 @@ router = APIRouter(
 #현재 활성화 중인 주문 목록 조회
 @router.get(
     "/available",
-    response_model=OrderListResponse
+    response_model=order_schema.OrderListResponse
 )
 def get_available_orders(
-    query: OrderListQuery = Depends()
+    query: order_schema.OrderListQuery = Depends()
 ):
     rows = staff_service.get_available_order_list_from_page(
         page=query.page,
@@ -22,3 +22,10 @@ def get_available_orders(
     )
 
     return {"orders": rows}
+
+@router.get(
+    "/orders/{order_id}/items",
+    response_model=list[order_schema.OrderItemResponse]
+)
+def get_order_items(order_id: str):
+    return staff_service.get_items_from_order(order_id)

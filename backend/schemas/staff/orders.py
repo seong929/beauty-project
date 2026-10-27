@@ -1,6 +1,7 @@
 
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
+from decimal import Decimal
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -51,3 +52,14 @@ class OrderListQuery(BaseModel):
 # 주문 목록 응답
 class OrderListResponse(BaseModel):
     orders: list[OrderResponse]
+
+class OrderItemResponse(BaseModel):
+    order_item_id: str
+    purchase_quantity: int
+    purchase_unit_price: Decimal
+    inventory_id: str
+    expires_on: date | None
+    cosmetic_id: str
+    cosmetic_name: str
+
+    model_config = ConfigDict(from_attributes=True)
