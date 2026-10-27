@@ -49,11 +49,13 @@ def update_delivery_status(
     conn = get_connection()
 
     try:
+        conn.begin()
+
         with conn.cursor() as cursor:
             # 1. 배송 정보 조회 및 잠금
             cursor.execute(
                 """
-                SELECT delivery_status
+                SELECT order_id, delivery_status
                 FROM delivery_information
                 WHERE delivery_id = %s
                 FOR UPDATE
@@ -71,6 +73,7 @@ def update_delivery_status(
 
             current_status = delivery["delivery_status"]
             new_status = data.delivery_status
+            order_id = delivery["order_id"]
 
             # 2. 허용되는 배송 상태 변경 규칙
             allowed_transitions = {
@@ -135,6 +138,25 @@ def update_delivery_status(
                     detail="배송 상태 변경에 실패했습니다.",
                 )
 
+            # 4. 배송 완료 시 주문 상태도 변경
+            if new_status == "DELIVERED":
+                cursor.execute(
+                    """
+                    UPDATE orders
+                    SET order_status = 'DELIVERED'
+                    WHERE order_id = %s
+                    AND order_status = 'SHIPPED'
+                    """,
+                    (order_id,),
+                )
+
+                if cursor.rowcount != 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="주문 상태를 배송 완료로 변경할 수 없습니다.",
+                    )
+
+        # 5. 배송 상태와 주문 상태를 함께 저장
         conn.commit()
 
         return {
