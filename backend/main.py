@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from routers.admin.approval_router import router as approval_router
 from routers.admin.cosmetic_router import router as cosmetic_router
 from routers.admin.inbound_router import router as inbound_router
+from routers.admin.outbound_router import router as outbound_router
 from routers.admin.purchase_order_router import router as purchase_order_router
 from routers.admin.return_router import router as admin_return_router
 from routers.staff.staff_auth_related import router as staff_auth_router
@@ -30,6 +31,7 @@ app.include_router(cosmetic_router)
 app.include_router(approval_router)
 app.include_router(purchase_order_router)
 app.include_router(inbound_router)
+app.include_router(outbound_router)
 app.include_router(customer_router)
 app.include_router(customer_categories_router)
 app.include_router(cart_items_router)

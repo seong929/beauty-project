@@ -37,7 +37,7 @@ def customeres_upload(
         with conn.cursor() as curs:
             sql = """
                 INSERT INTO customers (
-                    customer_id
+                    customer_id,
                     login_id,
                     password_hash,
                     customer_name,
@@ -45,7 +45,7 @@ def customeres_upload(
                     address,
                     phone
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
 
             curs.execute(sql, (
