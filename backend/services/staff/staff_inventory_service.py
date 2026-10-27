@@ -115,128 +115,272 @@ def get_inventory_by_cosmetic_id(
     finally:
         conn.close()
 
-def ship_order_and_decrease_stock(order_id: str) -> dict:
-    """모든 주문 항목의 수량만큼 재고 차감. 실패 시 주문/재고 전부 rollback."""
-    if not order_id or not order_id.strip():
-        raise HTTPException(status_code=400, detail="주문 번호를 입력해야 합니다.")
+    
+def get_inventory_grouped_by_status(
+    inventory_status: str | None = None,
+    cosmetic_id: str | None = None,
+    sale_option: str | None = None,
+) -> dict:
+    """상태별 재고 집계 및 필터 조회."""
+
+    if inventory_status not in (
+        None, "MAINTAIN", "HOLD", "DISCARD"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="유효하지 않은 재고 상태입니다."
+        )
+
+    if sale_option not in (
+        None, "NORMAL", "NEAR_EXPIRY"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="유효하지 않은 판매 옵션입니다."
+        )
+
+    if cosmetic_id is not None and not cosmetic_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="화장품 ID를 입력해야 합니다."
+        )
+
+    conditions = []
+    params = []
+
+    if cosmetic_id is not None:
+        conditions.append("cosmetic_id = %s")
+        params.append(cosmetic_id)
+
+    if sale_option is not None:
+        conditions.append("sale_option = %s")
+        params.append(sale_option)
+
+    base_where = (
+        " WHERE " + " AND ".join(conditions)
+        if conditions else ""
+    )
+
+    listing_conditions = conditions.copy()
+    listing_params = params.copy()
+
+    if inventory_status is not None:
+        listing_conditions.append(
+            "inventory_status = %s"
+        )
+        listing_params.append(inventory_status)
+
+    list_where = (
+        " WHERE " + " AND ".join(listing_conditions)
+        if listing_conditions else ""
+    )
 
     try:
         conn = get_connection()
     except pymysql.MySQLError:
-        logger.exception("출고 처리: DB 연결 실패")
-        raise HTTPException(status_code=503, detail="데이터베이스 연결에 실패했습니다.")
+        logger.exception("상태별 재고 조회 DB 연결 실패")
+        raise HTTPException(
+            status_code=503,
+            detail="데이터베이스 연결에 실패했습니다."
+        )
 
     try:
-        # get_connection()은 autocommit=False. 여기서 하나의 트랜잭션 시작.
         with conn.cursor() as cursor:
-            # 동일 주문 동시 출고 직렬화
+            # 상태별 전체 수량 집계
             cursor.execute(
-                "SELECT order_status FROM orders WHERE order_id = %s FOR UPDATE",
-                (order_id,),
+                """
+                SELECT
+                    inventory_status,
+                    COUNT(*) AS inventory_count,
+                    COALESCE(
+                        SUM(stock_quantity), 0
+                    ) AS total_quantity
+                FROM product_inventory
+                """
+                + base_where
+                + " GROUP BY inventory_status",
+                params
             )
-            order = cursor.fetchone()
-            if order is None:
-                raise HTTPException(status_code=404, detail="존재하지 않는 주문입니다.")
-            if order["order_status"] != "PREPARING":
+            summary_rows = cursor.fetchall()
+
+            # 필터 적용 재고 목록
+            cursor.execute(
+                """
+                SELECT
+                    inventory_id,
+                    cosmetic_id,
+                    stock_quantity,
+                    received_on,
+                    expires_on,
+                    inventory_status,
+                    sale_option
+                FROM product_inventory
+                """
+                + list_where
+                + """
+                ORDER BY
+                    inventory_status ASC,
+                    received_on DESC,
+                    inventory_id ASC
+                """,
+                listing_params
+            )
+            inventories = cursor.fetchall()
+
+        summary = {
+            state: {
+                "inventory_count": 0,
+                "total_quantity": 0
+            }
+            for state in ("MAINTAIN", "HOLD", "DISCARD")
+        }
+
+        for item in summary_rows:
+            summary[item["inventory_status"]] = {
+                "inventory_count": int(
+                    item["inventory_count"]
+                ),
+                "total_quantity": int(
+                    item["total_quantity"]
+                )
+            }
+
+        return {
+            "summary": summary,
+            "filters": {
+                "inventory_status": inventory_status,
+                "cosmetic_id": cosmetic_id,
+                "sale_option": sale_option
+            },
+            "inventories": inventories
+        }
+
+    except pymysql.MySQLError:
+        logger.exception("상태별 재고 조회 SQL 오류")
+        raise HTTPException(
+            status_code=500,
+            detail="재고 조회 중 DB 오류가 발생했습니다."
+        )
+    finally:
+        conn.close()
+
+
+def discard_inventory_stock(
+    inventory_id: str,
+    quantity: int
+) -> dict:
+    """DISCARD 상태의 재고 수량을 차감한다."""
+
+    if not inventory_id or not inventory_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="재고 ID를 입력해야 합니다."
+        )
+
+    if type(quantity) is not int or quantity <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="폐기 수량은 1 이상의 정수여야 합니다."
+        )
+
+    try:
+        conn = get_connection()
+    except pymysql.MySQLError:
+        logger.exception("재고 폐기 DB 연결 실패")
+        raise HTTPException(
+            status_code=503,
+            detail="데이터베이스 연결에 실패했습니다."
+        )
+
+    try:
+        with conn.cursor() as cursor:
+            # 동시 폐기 요청 방지
+            cursor.execute(
+                """
+                SELECT
+                    inventory_status,
+                    stock_quantity
+                FROM product_inventory
+                WHERE inventory_id = %s
+                FOR UPDATE
+                """,
+                (inventory_id,)
+            )
+
+            row = cursor.fetchone()
+
+            if row is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="존재하지 않는 재고입니다."
+                )
+
+            if row["inventory_status"] != "DISCARD":
                 raise HTTPException(
                     status_code=409,
-                    detail="PREPARING 상태의 주문만 출고할 수 있습니다.",
+                    detail="DISCARD 상태의 재고만 폐기할 수 있습니다."
                 )
 
-            # 잠긴 주문의 상품을 읽고 동일 재고 묶음을 합산
+            before = int(row["stock_quantity"])
+
+            if before < quantity:
+                raise HTTPException(
+                    status_code=409,
+                    detail="폐기 수량이 현재 재고량보다 많습니다."
+                )
+
             cursor.execute(
                 """
-                SELECT inventory_id, SUM(purchase_quantity) AS quantity
-                FROM order_items
-                WHERE order_id = %s
-                GROUP BY inventory_id
-                ORDER BY inventory_id
+                UPDATE product_inventory
+                SET stock_quantity = stock_quantity - %s
+                WHERE inventory_id = %s
+                  AND inventory_status = 'DISCARD'
+                  AND stock_quantity >= %s
                 """,
-                (order_id,),
+                (quantity, inventory_id, quantity)
             )
-            items = cursor.fetchall()
-            if not items:
-                raise HTTPException(status_code=409, detail="출고할 주문 상품이 없습니다.")
 
-            deductions = []
-            # 모든 작업이 같은 트랜잭션. 정렬된 재고 잠금으로 데드락 위험 감소.
-            for item in items:
-                inventory_id = item["inventory_id"]
-                quantity = int(item["quantity"])
-                if quantity <= 0:
-                    raise HTTPException(status_code=409, detail="올바르지 않은 주문 수량입니다.")
-
-                cursor.execute(
-                    """
-                    SELECT stock_quantity, inventory_status
-                    FROM product_inventory
-                    WHERE inventory_id = %s
-                    FOR UPDATE
-                    """,
-                    (inventory_id,),
-                )
-                stock = cursor.fetchone()
-                if stock is None:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"재고가 존재하지 않습니다: {inventory_id}",
-                    )
-                if stock["inventory_status"] != "MAINTAIN":
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"출고할 수 없는 재고 상태입니다: {inventory_id}",
-                    )
-                if int(stock["stock_quantity"]) < quantity:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"출고 재고가 부족합니다: {inventory_id}",
-                    )
-
-                cursor.execute(
-                    """
-                    UPDATE product_inventory
-                    SET stock_quantity = stock_quantity - %s
-                    WHERE inventory_id = %s
-                      AND inventory_status = 'MAINTAIN'
-                      AND stock_quantity >= %s
-                    """,
-                    (quantity, inventory_id, quantity),
-                )
-                if cursor.rowcount != 1:
-                    raise HTTPException(
-                        status_code=409, detail=f"재고 차감에 실패했습니다: {inventory_id}"
-                    )
-                deductions.append({"inventory_id": inventory_id, "quantity": quantity})
-
-            # 재고 차감 완료 시에만 주문 상태 변경. 하나라도 실패하면 전체 rollback.
-            cursor.execute(
-                """
-                UPDATE orders SET order_status = 'SHIPPED'
-                WHERE order_id = %s AND order_status = 'PREPARING'
-                """,
-                (order_id,),
-            )
             if cursor.rowcount != 1:
-                raise HTTPException(status_code=409, detail="주문 상태 변경에 실패했습니다.")
+                raise HTTPException(
+                    status_code=409,
+                    detail="재고 차감에 실패했습니다."
+                )
 
         conn.commit()
+
         return {
-            "order_id": order_id,
-            "previous_status": "PREPARING",
-            "order_status": "SHIPPED",
-            "deductions": deductions,
-            "message": "주문 출고 및 재고 차감이 완료되었습니다.",
+            "inventory_id": inventory_id,
+            "inventory_status": "DISCARD",
+            "discarded_quantity": quantity,
+            "previous_quantity": before,
+            "stock_quantity": before - quantity
         }
+
     except HTTPException:
         conn.rollback()
         raise
+
     except pymysql.MySQLError:
         conn.rollback()
-        logger.exception("주문 출고 SQL 실패: order_id=%s", order_id)
-        raise HTTPException(status_code=500, detail="출고 처리 중 데이터베이스 오류가 발생했습니다.")
+        logger.exception(
+            "재고 폐기 SQL 오류: %s",
+            inventory_id
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="재고 폐기 중 DB 오류가 발생했습니다."
+        )
+
     except Exception:
         conn.rollback()
-        logger.exception("주문 출고 예상치 못한 실패: order_id=%s", order_id)
-        raise HTTPException(status_code=500, detail="출고 처리 중 서버 오류가 발생했습니다.")
+        logger.exception(
+            "재고 폐기 서버 오류: %s",
+            inventory_id
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="재고 폐기 중 서버 오류가 발생했습니다."
+        )
+
     finally:
         conn.close()

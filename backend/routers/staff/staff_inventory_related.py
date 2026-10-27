@@ -9,6 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 import services.staff.staff_inventory_service as staff_inventory_service
 from services.staff.staff_auth_service import require_staff
 
+from schemas.staff.inventory import (
+    InventoryStatus,
+    SaleOption,
+    DiscardInventoryRequest
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
@@ -16,18 +22,6 @@ router = APIRouter(
     tags=["직원-재고"],
     dependencies=[Depends(require_staff)]
 )
-
-
-class InventoryStatus(str, Enum):
-    MAINTAIN = "MAINTAIN"
-    HOLD = "HOLD"
-    DISCARD = "DISCARD"
-
-
-class SaleOption(str, Enum):
-    NORMAL = "NORMAL"
-    NEAR_EXPIRY = "NEAR_EXPIRY"
-
 
 class InventoryOrderBy(str, Enum):
     RECEIVED_ON = "received_on"
@@ -129,24 +123,65 @@ def get_inventory_by_cosmetic_id(
             detail="재고 목록 조회 중 서버 오류가 발생했습니다."
         )
 
-@router.post(
-    "/orders/{order_id}/ship",
-    summary="주문 출고 및 재고 차감",
+@router.get(
+    "/inventory/by-status",
+    summary="상태별 재고 분류 및 필터 조회",
     description=(
-        "PREPARING 주문을 SHIPPED로 변경하고 주문 상품별 재고를 차감합니다. "
-        "주문 상태 변경과 모든 재고 차감은 하나의 트랜잭션으로 처리되어, "
-        "하나라도 실패하면 모든 변경을 취소합니다. 중복 출고는 허용하지 않습니다."
+        "MAINTAIN, HOLD, DISCARD 상태별 재고 수량을 "
+        "집계하고 조건에 맞는 재고 목록을 반환합니다."
+    )
+)
+def get_inventory_grouped_by_status(
+    inventory_status: InventoryStatus | None = Query(
+        default=None,
+        description="조회할 재고 상태"
+    ),
+    cosmetic_id: str | None = Query(
+        default=None,
+        description="화장품 옵션 ID"
+    ),
+    sale_option: SaleOption | None = Query(
+        default=None,
+        description="판매 옵션"
+    )
+):
+    return staff_inventory_service.get_inventory_grouped_by_status(
+        inventory_status=(
+            inventory_status.value
+            if inventory_status is not None else None
+        ),
+        cosmetic_id=cosmetic_id,
+        sale_option=(
+            sale_option.value
+            if sale_option is not None else None
+        )
+    )
+
+
+@router.patch(
+    "/inventory/{inventory_id}/discard",
+    summary="DISCARD 재고 폐기 및 수량 차감",
+    description=(
+        "inventory_id를 기준으로 DISCARD 상태의 "
+        "재고 수량을 차감합니다."
     ),
     responses={
-        401: {"description": "직원 인증 필요"},
-        403: {"description": "직원 권한 없음"},
-        404: {"description": "주문 없음"},
-        409: {"description": "주문 상태 오류, 재고 부족 또는 출고 불가"},
-        500: {"description": "DB/서버 처리 오류"},
-        503: {"description": "DB 연결 실패"},
-    },
+        404: {"description": "재고 없음"},
+        409: {"description": "재고 상태 불일치 또는 수량 부족"},
+        503: {"description": "DB 연결 실패"}
+    }
 )
-def ship_order(
-    order_id: Annotated[str, Path(min_length=1, description="출고할 주문 번호")]
+def discard_inventory(
+    inventory_id: Annotated[
+        str,
+        Path(
+            min_length=1,
+            description="폐기할 재고 ID"
+        )
+    ],
+    body: DiscardInventoryRequest
 ):
-    return staff_inventory_service.ship_order_and_decrease_stock(order_id)
+    return staff_inventory_service.discard_inventory_stock(
+        inventory_id=inventory_id,
+        quantity=body.quantity
+    )
