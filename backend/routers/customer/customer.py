@@ -19,14 +19,15 @@ def delivery_test():
 
 
 # 고객 등록(회원 가입)
-@router.post("/customers_upload", tags=["고객 관리"], summary="고객 등록")
+@router.post("/customer_upload",summary="고객 등록")
 def customeres_upload(
-    login_id: str = Form(..., ),
-    password: str = Form(..., ),
-    customer_name: str = Form(...,),
-    email: str = Form(...,),
-    address: str = Form(...,),
-    phone_number: str = Form("",)
+    customer_id: str = Form(...,min_length=1, max_length=60),
+    login_id: str = Form(...,min_length=2,max_length=60 ),
+    password: str = Form(...,min_length=8,max_length=20 ),
+    customer_name: str = Form(...,min_length=2,max_length=30),
+    email: str = Form(...,max_length=100),
+    address: str = Form(...,max_length=100),
+    phone: str = Form(...,min_length=1,max_length=30)
     ):
 
     try:
@@ -36,43 +37,42 @@ def customeres_upload(
         with conn.cursor() as curs:
             sql = """
                 INSERT INTO customers (
+                    customer_id
                     login_id,
                     password_hash,
                     customer_name,
                     email,
                     address,
-                    phone_number
+                    phone
                 )
                 VALUES (%s, %s, %s, %s, %s, %s)
             """
 
             curs.execute(sql, (
+                customer_id,
                 login_id,
                 hashed_password,
                 customer_name,
                 email,
                 address,
-                phone_number or None,
+                phone or None,
             ))
-
-            customer_id = curs.lastrowid
-
         conn.commit()
         conn.close()
 
         return {
             "result": "OK",
-            "customer_id": customer_id,
-            "customer_name": customer_name,
+            "message" : "회원 가입 완료" 
         }
 
     except Exception as e:
-        return {'result' : 'Error'}
-    
-    
+        return {"result" : "Error",
+                "message" : "회원 가입 불가"}
+
+
 # 고객 정보 조회
-@router.get("/customers_select", tags=["고객 조회"], summary="고객 조회")
-def customers_select():
+@router.get("/customer_select",summary="고객 조회")
+def customer_select():
     conn = get_connection()
     try:
         with conn.cursor() as curs:
@@ -93,13 +93,13 @@ def customers_select():
 
 
 # 고객 정보 수정
-@router.put("/customers_update", tags=["고객 관리"], summary="고객 정보 수정")
+@router.put("/customer_update",summary="고객 정보 수정")
 def customer_update(
-    customer_id: str = Query(..., min_length=1, max_length=64, pattern=r"\S"),
-    customer_name: str = Form(..., min_length=1, max_length=100),
-    email: str = Form(..., min_length=1, max_length=255),
-    address: str = Form(..., min_length=1, max_length=500),
-    phone_number: str = Form(..., min_length=1, max_length=30),
+    customer_id: str = Query(..., min_length=1, max_length=60),
+    customer_name: str = Form(..., min_length=1, max_length=30),
+    email: str = Form(..., min_length=1, max_length=200),
+    address: str = Form(..., min_length=1, max_length=200),
+    phone: str = Form(..., min_length=1, max_length=30),
 ):
     conn = None
     try:
@@ -115,32 +115,37 @@ def customer_update(
             curs.execute(
                 """
                 UPDATE customers
-                SET customer_name = %s, email = %s, address = %s, phone = %s
+                SET customer_name = %s,
+                email = %s,
+                address = %s,
+                phone = %s
                 WHERE customer_id = %s
                 """,
                 (customer_name,
                 email,
                 address,
-                phone_number,
-                customer_id),
-            )
+                phone,
+                customer_id,))
+            
         conn.commit()
-        conn.close()
         return {"result": "OK",
                 "message": "고객 정보가 수정되었습니다."
                 }
-    except Exception as e:
-        return{'result' : 'Error'}
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
+
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 
-
-# 고객 삭제
-@router.post("/customers_delect",tags=["고객 삭제"],
-                        summary="고객 휴먼 상태 및 회원 탈퇴",
-                        )
+# 고객 탈퇴
+@router.post("/customer_delect",summary="고객 휴먼 상태 및 회원 탈퇴")
 async def customer_delect(
-    seq : int = Form(...)):
+    customer_id : str = Form(...)):
     try:
         conn = get_connection()
         curs = conn.cursor()
@@ -149,14 +154,14 @@ async def customer_delect(
                     withdrawn_at = NOW()
                     WHERE customer_id = %s
                     AND account_status <> 'WITHDRAWN'"""
-        curs.execute(sql, (seq))
+        curs.execute(sql, (customer_id,))
         conn.commit()
         conn.close()
         return{'result' : 'OK',
-                "message" : '고객이 없거나 이미 탈퇴한 회원입니다.'}
+                "message" : '회원 탈퇴가 처리되었습니다.'}
     except Exception as e:
         return{'result' : 'Error',
-                "message" : '회원 탈퇴가 처리되었습니다.'}
+                "message" : '회원 정보가 없습니다.'}
 
 
 
