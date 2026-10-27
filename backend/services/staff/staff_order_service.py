@@ -208,3 +208,103 @@ def get_order_detail(order_id: str):
 
     finally:
         conn.close()
+
+# 특정 주문의 상태 변경. 주문 상세 페이지에서 사용됨
+def update_order_status(
+    order_id: str,
+    order_status: str
+):
+    if not order_id or not order_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="주문 번호를 입력해야 합니다."
+        )
+
+    try:
+        conn = get_connection()
+
+    except pymysql.MySQLError:
+        logger.exception("주문 상태 변경: DB 연결 실패")
+        raise HTTPException(
+            status_code=503,
+            detail="데이터베이스 연결에 실패했습니다."
+        )
+
+    try:
+        with conn.cursor() as cursor:
+            # 변경 대상 행 잠금
+            cursor.execute(
+                """
+                SELECT order_status
+                FROM orders
+                WHERE order_id = %s
+                FOR UPDATE
+                """,
+                (order_id,)
+            )
+
+            order = cursor.fetchone()
+
+            if order is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="해당 주문을 찾을 수 없습니다."
+                )
+
+            # 기존 상태와 동일한 경우
+            if order["order_status"] == order_status:
+                raise HTTPException(
+                    status_code=409,
+                    detail="이미 해당 상태로 설정된 주문입니다."
+                )
+
+            # 상태 변경
+            cursor.execute(
+                """
+                UPDATE orders
+                SET order_status = %s
+                WHERE order_id = %s
+                """,
+                (order_status, order_id)
+            )
+
+            # 변경된 주문 정보 반환
+            cursor.execute(
+                """
+                SELECT *
+                FROM orders
+                WHERE order_id = %s
+                """,
+                (order_id,)
+            )
+
+            updated_order = cursor.fetchone()
+
+        conn.commit()
+        return updated_order
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except pymysql.MySQLError:
+        conn.rollback()
+        logger.exception(
+            "주문 상태 변경 실패: order_id=%s",
+            order_id
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="주문 상태를 변경하는 중 데이터베이스 오류가 발생했습니다."
+        )
+
+    except Exception:
+        conn.rollback()
+        logger.exception(
+            "주문 상태 변경 중 예상치 못한 오류: order_id=%s",
+            order_id
+        )
+        raise
+
+    finally:
+        conn.close()
