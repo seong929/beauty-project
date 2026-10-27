@@ -53,12 +53,23 @@ class OrderListQuery(BaseModel):
 class OrderListResponse(BaseModel):
     orders: list[OrderResponse]
 
+class SaleOption(str, Enum):
+    NORMAL = "NORMAL"
+    NEAR_EXPIRY = "NEAR_EXPIRY"
+
+
 class OrderItemResponse(BaseModel):
     order_item_id: str
     purchase_quantity: int
     purchase_unit_price: Decimal
+
+    sale_option: SaleOption
+    used_points: int
+    earned_points: int
+
     inventory_id: str
     expires_on: date | None
+
     cosmetic_id: str
     cosmetic_name: str
 

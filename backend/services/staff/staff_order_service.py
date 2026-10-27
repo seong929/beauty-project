@@ -129,6 +129,9 @@ def get_items_from_order(order_id: str):
                     oi.order_item_id,
                     oi.purchase_quantity,
                     oi.purchase_unit_price,
+                    oi.sale_option,
+                    oi.used_points,
+                    oi.earned_points,
                     pi.inventory_id,
                     pi.expires_on,
                     c.cosmetic_id,
@@ -151,6 +154,56 @@ def get_items_from_order(order_id: str):
         raise HTTPException(
             status_code=500,
             detail="주문 상품 정보를 조회하는 중 오류가 발생했습니다."
+        )
+
+    finally:
+        conn.close()
+
+#특정 주문 내역의 모든 관련 정보를 가져오는 함수
+def get_order_detail(order_id: str):
+    if not order_id or not order_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="주문 번호를 입력해야 합니다."
+        )
+
+    try:
+        conn = get_connection()
+
+    except pymysql.MySQLError:
+        logger.exception("주문 상세 조회: DB 연결 실패")
+        raise HTTPException(
+            status_code=503,
+            detail="데이터베이스 연결에 실패했습니다."
+        )
+
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                SELECT *
+                FROM orders
+                WHERE order_id = %s
+            """
+
+            cursor.execute(sql, (order_id,))
+            row = cursor.fetchone()
+
+            if row is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="해당 주문 내역을 찾을 수 없습니다."
+                )
+
+            return row
+
+    except pymysql.MySQLError:
+        logger.exception(
+            "주문 상세 조회 실패: order_id=%s",
+            order_id
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="주문 상세 정보를 조회하는 중 오류가 발생했습니다."
         )
 
     finally:

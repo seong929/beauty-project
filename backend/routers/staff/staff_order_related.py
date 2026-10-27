@@ -80,3 +80,22 @@ def get_order_items(order_id: str):
             status_code=500,
             detail="주문 상품 정보를 불러오는 중 서버 오류가 발생했습니다."
         )
+
+# 특정 주문의 상세 정보 조회
+@router.get("/orders/{order_id}")
+def get_order_detail(order_id: str):
+    try:
+        return staff_order_service.get_order_detail(order_id)
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        logger.exception(
+            "주문 상세 조회 중 예상치 못한 오류: order_id=%s",
+            order_id
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="주문 상세 정보를 불러오는 중 서버 오류가 발생했습니다."
+        )
