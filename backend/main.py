@@ -6,6 +6,7 @@ from routers.delivery.delivery import router as delivery_router
 from routers.customer.customer import router as customer_router
 from routers.customer.order import router as order_router
 from routers.customer.review import router as review_router
+from routers.admin.purchase_order_router import router as purchase_order_router
 
 
 app = FastAPI(
@@ -20,6 +21,7 @@ app.include_router(delivery_router)
 app.include_router(customer_router)
 app.include_router(order_router)
 app.include_router(review_router)
+app.include_router(purchase_order_router)
 
 
 @app.get("/")
