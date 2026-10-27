@@ -1,6 +1,4 @@
-from fastapi import APIRouter, Form, HTTPException, Query
-import pymysql
-
+from fastapi import APIRouter, Form, HTTPException
 from database import get_connection
 from services.customer.customer_service import next_sequence
 
@@ -8,16 +6,16 @@ router = APIRouter(tags=["리뷰"])
 
 
 # 리뷰 등록
-@router.post("/reviews_upload", tags=["리뷰 등록"], summary="리뷰 등록")
+@router.post("/reviews_upload")
 def reviews_upload(
     customer_id: str = Form(...,),
     cosmetic_id: str = Form(...,),
     review_content: str = Form(...,),
     rating: int = Form(..., ge=1, le=5),
 ):
+    conn = None
     try:
         conn = get_connection()
-
         with conn.cursor() as curs:
             review_id = f"rev_{next_sequence(curs, 'review')}"
             sql = """
@@ -39,24 +37,26 @@ def reviews_upload(
                 rating
             ))
         conn.commit()
-        conn.close()
-
         return {
             "result": "OK",
             "customer_id": customer_id,
         }
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
 
-    except Exception as e:
-        return {'result' : 'Error'}
-
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 # 리뷰 조회
-@router.get("/reviews_select", tags=["리뷰 조회"], summary="리뷰 조회")
+@router.get("/reviews_select")
 def reviews_select(
-    review_id: str | None = Query(None),
-    customer_id: str | None = Query(None),
-    cosmetic_id: str | None = Query(None),
+    review_id: str | None = Form(None),
+    customer_id: str | None = Form(None),
+    cosmetic_id: str | None = Form(None),
 ):
     conn = get_connection()
 
@@ -107,15 +107,20 @@ def reviews_select(
             curs.execute(sql, tuple(params))
             rows = curs.fetchall()
         return {"result": rows}
-    finally:
-        conn.close()
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
 
+    finally:
+        if conn is not None:
+            conn.close()
 
 # 리뷰 수정
-@router.put("/reviews_update", tags=["리뷰 수정"], summary="리뷰 수정")
+@router.put("/reviews_update")
 def reviews_update(
-    review_id: str = Query(...,),
-    customer_id: str = Query(...,),
+    review_id: str = Form(...,),
+    customer_id: str = Form(...,),
     review_content: str = Form(...,),
     rating: int = Form(..., ge=1, le=5),
 ):
@@ -129,11 +134,19 @@ def reviews_update(
                 (review_id,),
             )
             review = curs.fetchone()
+            if review is None:
+                raise HTTPException(404, "존재하지 않는 리뷰입니다.")
+
+            if review["customer_id"] != customer_id:
+                raise HTTPException(403, "작성자만 수정할 수 있습니다.")
+                
             curs.execute(
                 """
                 UPDATE reviews
-                SET review_content = %s, rating = %s
-                WHERE review_id = %s AND customer_id = %s
+                SET review_content = %s,
+                    rating = %s
+                WHERE review_id = %s AND
+                    customer_id = %s
                 """,
                 (review_content, rating, review_id, customer_id),
             )
@@ -142,33 +155,44 @@ def reviews_update(
         return {"result": "OK", "review_id": review_id,
                 "message": "리뷰가 수정되었습니다."}
         
-    except Exception as e:
-        return{'result' : 'Error'}
-    finally:
-            conn.close()
-            
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
 
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 # 리뷰 삭제
-@router.delete("/reviews_delete", tags=["리뷰 삭제"],summary="리뷰 삭제")
-async def reviews_delete(review_id: int = Form(...)):
+@router.delete("/reviews_delete")
+def reviews_delete(
+    review_id: str = Form(...),
+    customer_id:str = Form(...)):
     conn = None
     try:
         conn = get_connection()
         curs = conn.cursor()
         curs.execute(
-            "DELETE FROM reviews WHERE review_id = %s",
-            (review_id,),
+            """
+                DELETE FROM reviews
+                WHERE review_id = %s
+                AND customer_id = %s
+                """,
+            (review_id,customer_id),
         )
 
         deleted_count = curs.rowcount
         conn.commit()
-        conn.close()
-        return {"result": "OK", "deleted_count": deleted_count}
+        return {"result": "OK",
+                "deleted_count": deleted_count}
 
-    except Exception as e:
-        return {"result": "리뷰가 삭제 되었습니다."}
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
 
-
-            
+    finally:
+        if conn is not None:
+            conn.close()
