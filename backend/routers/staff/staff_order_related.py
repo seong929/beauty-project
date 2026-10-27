@@ -255,13 +255,3 @@ def update_order_status(
             status_code=500,
             detail="주문 상태 변경 중 서버 오류가 발생했습니다."
         )
-
-
-# main.py 수정 없이 /staff/auth/login 을 기존 직원 라우터에 등록
-# 이 로그인 경로는 인증 전이므로 보호된 router-level dependency를 사용하지 않는다.
-router.include_router(staff_auth_router)
-
-
-# main.py 수정 없이 별도 출고 라우터 등록
-from routers.staff.staff_shipping_related import router as shipping_router
-router.include_router(shipping_router)
