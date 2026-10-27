@@ -8,11 +8,22 @@ from database import get_connection
 logger = logging.getLogger(__name__)
 
 
-# 현재 진행 중인 주문 내역을 페이지 단위로 가져오는 함수
+# 현재 진행 중인 선택된 상태의 주문 내역을 페이지 단위로 가져오는 함수
 def get_available_order_list_from_page(
     page: int,
     count: int,
     asc: bool
+):
+    if page < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="페이지 번호는 1 이상이어야 합니다."
+        )
+def get_available_order_list_from_page(
+    page: int,
+    count: int,
+    asc: bool,
+    statuses: list[str] | None = None
 ):
     if page < 1:
         raise HTTPException(
@@ -39,16 +50,36 @@ def get_available_order_list_from_page(
         with conn.cursor() as cursor:
             orderby = "ASC" if asc else "DESC"
 
-            sql = f"""
-                SELECT * FROM orders
-                WHERE order_status NOT IN (
-                    'DELIVERED', 'CANCELLED', 'RETURNED'
-                )
-                ORDER BY order_seq {orderby}
-                LIMIT %s OFFSET %s
-            """
+            if statuses:
+                # 중복된 주문 상태 제거
+                statuses = list(dict.fromkeys(statuses))
 
-            cursor.execute(sql, (count, (page - 1) * count))
+                # 선택한 모든 상태를 IN 조건에 적용
+                placeholders = ", ".join(["%s"] * len(statuses))
+
+                sql = f"""
+                    SELECT *
+                    FROM orders
+                    WHERE order_status IN ({placeholders})
+                    ORDER BY order_seq {orderby}
+                """
+
+                params = tuple(statuses)
+
+            else:
+                sql = f"""
+                    SELECT *
+                    FROM orders
+                    WHERE order_status NOT IN (
+                        'DELIVERED', 'CANCELLED', 'RETURNED'
+                    )
+                    ORDER BY order_seq {orderby}
+                    LIMIT %s OFFSET %s
+                """
+
+                params = (count, (page - 1) * count)
+
+            cursor.execute(sql, params)
             return cursor.fetchall()
 
     except pymysql.MySQLError:

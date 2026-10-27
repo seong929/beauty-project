@@ -1,7 +1,8 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 import schemas.staff.orders as order_schema
 import services.staff.staff_service as staff_service
@@ -14,32 +15,39 @@ router = APIRouter(
 )
 
 
-# 현재 활성화 중인 주문 목록 조회
+# 현재 활성화 중인 선택한 상태들의 주문 목록 조회
 @router.get(
-    "/orders/available",
+    "/available",
     response_model=order_schema.OrderListResponse
 )
 def get_available_orders(
-    query: order_schema.OrderListQuery = Depends()
+    query: order_schema.OrderListQuery = Depends(),
+    statuses: Annotated[
+        list[order_schema.OrderStatus] | None,
+        Query()
+    ] = None
 ):
     try:
         rows = staff_service.get_available_order_list_from_page(
             page=query.page,
             count=query.count,
-            asc=query.asc
+            asc=query.asc,
+            statuses=(
+                [status.value for status in statuses]
+                if statuses else None
+            )
         )
 
         return {"orders": rows}
 
     except HTTPException:
-        # 서비스에서 발생한 400, 500, 503 오류를 그대로 전달
         raise
 
     except Exception:
-        logger.exception("활성 주문 목록 조회 중 예상치 못한 오류")
+        logger.exception("주문 목록 조회 중 예상치 못한 오류")
         raise HTTPException(
             status_code=500,
-            detail="활성 주문 목록을 불러오는 중 서버 오류가 발생했습니다."
+            detail="주문 목록 조회 중 서버 오류가 발생했습니다."
         )
 
 
