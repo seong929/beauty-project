@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/staff",
-    tags=["직원"],
+    tags=["직원-주문"],
 )
 
 
