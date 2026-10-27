@@ -17,25 +17,32 @@ router = APIRouter(
 
 # 현재 활성화 중인 선택한 상태들의 주문 목록 조회
 @router.get(
-    "/available",
+    "/order/available",
     response_model=order_schema.OrderListResponse
 )
 def get_available_orders(
     query: order_schema.OrderListQuery = Depends(),
+
     statuses: Annotated[
         list[order_schema.OrderStatus] | None,
-        Query()
+        Query(description="조회할 주문 상태 (다중 선택 가능)")
+    ] = None,
+
+    customer_id: Annotated[
+        str | None,
+        Query(description="특정 고객의 주문만 조회")
     ] = None
 ):
     try:
         rows = staff_order_service.get_available_order_list_from_page(
-            page=query.page,
-            count=query.count,
-            asc=query.asc,
-            statuses=(
-                [status.value for status in statuses]
-                if statuses else None
-            )
+        page=query.page,
+        count=query.count,
+        asc=query.asc,
+        statuses=(
+            [status.value for status in statuses]
+            if statuses else None
+        ),
+        customer_id=customer_id
         )
 
         return {"orders": rows}

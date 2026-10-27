@@ -12,18 +12,9 @@ logger = logging.getLogger(__name__)
 def get_available_order_list_from_page(
     page: int,
     count: int,
-    asc: bool
-):
-    if page < 1:
-        raise HTTPException(
-            status_code=400,
-            detail="페이지 번호는 1 이상이어야 합니다."
-        )
-def get_available_order_list_from_page(
-    page: int,
-    count: int,
     asc: bool,
-    statuses: list[str] | None = None
+    statuses: list[str] | None = None,
+    customer_id: str | None = None
 ):
     if page < 1:
         raise HTTPException(
@@ -37,8 +28,17 @@ def get_available_order_list_from_page(
             detail="페이지당 조회 개수는 1~100개여야 합니다."
         )
 
+    if customer_id is not None:
+        customer_id = customer_id.strip()
+        if not customer_id:
+            raise HTTPException(
+                status_code=400,
+                detail="고객 ID는 빈 문자열일 수 없습니다."
+            )
+
     try:
         conn = get_connection()
+
     except pymysql.MySQLError:
         logger.exception("주문 목록 조회: DB 연결 실패")
         raise HTTPException(
@@ -49,37 +49,49 @@ def get_available_order_list_from_page(
     try:
         with conn.cursor() as cursor:
             orderby = "ASC" if asc else "DESC"
+            offset = (page - 1) * count
 
+            conditions = []
+            params = []
+
+            # 주문 상태 필터
             if statuses:
-                # 중복된 주문 상태 제거
                 statuses = list(dict.fromkeys(statuses))
-
-                # 선택한 모든 상태를 IN 조건에 적용
                 placeholders = ", ".join(["%s"] * len(statuses))
 
-                sql = f"""
-                    SELECT *
-                    FROM orders
-                    WHERE order_status IN ({placeholders})
-                    ORDER BY order_seq {orderby}
-                """
-
-                params = tuple(statuses)
+                conditions.append(
+                    f"order_status IN ({placeholders})"
+                )
+                params.extend(statuses)
 
             else:
-                sql = f"""
-                    SELECT *
-                    FROM orders
-                    WHERE order_status NOT IN (
-                        'DELIVERED', 'CANCELLED', 'RETURNED'
+                # 기본적으로 진행 중인 주문만 조회
+                conditions.append("""
+                    order_status NOT IN (
+                        'DELIVERED',
+                        'CANCELLED',
+                        'RETURNED'
                     )
-                    ORDER BY order_seq {orderby}
-                    LIMIT %s OFFSET %s
-                """
+                """)
 
-                params = (count, (page - 1) * count)
+            # 고객 ID 필터
+            if customer_id is not None:
+                conditions.append("customer_id = %s")
+                params.append(customer_id)
 
-            cursor.execute(sql, params)
+            where_clause = " AND ".join(conditions)
+
+            sql = f"""
+                SELECT *
+                FROM orders
+                WHERE {where_clause}
+                ORDER BY order_seq {orderby}
+                LIMIT %s OFFSET %s
+            """
+
+            params.extend([count, offset])
+
+            cursor.execute(sql, tuple(params))
             return cursor.fetchall()
 
     except pymysql.MySQLError:
