@@ -15,7 +15,7 @@ password_hasher = PasswordHash.recommended()
 
 
 # 고객 상품 조회
-@router.get("/customers_categories_search", tags=["고객 상품 조회"], summary="고객 상품 조회")
+@router.get("/customers_categories_search", summary="고객 상품 조회")
 def customers_categories():
     conn = get_connection()
     try:
@@ -27,7 +27,6 @@ def customers_categories():
                     c.cosmetic_name,
                     m.manufacturer_name,
                     cat.category_name,
-
                     -- 최신 용량
                     (
                         SELECT vh.volume_text
@@ -41,6 +40,8 @@ def customers_categories():
                             ) DESC
                         LIMIT 1
                     ) AS volume_text,
+
+
 
                     -- 최신 판매 가격
                     (
@@ -73,6 +74,8 @@ def customers_categories():
                 JOIN categories AS cat
                     ON cat.category_id = c.category_id
 
+
+
                 -- 판매 가능한 입고별 재고 합산
                 LEFT JOIN (
                     SELECT
@@ -88,6 +91,8 @@ def customers_categories():
                     GROUP BY cosmetic_id
                 ) AS i
                     ON i.cosmetic_id = c.cosmetic_id
+
+
 
                 -- 최신 판매 상태가 판매 중인 상품만 조회
                 WHERE (

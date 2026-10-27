@@ -19,29 +19,25 @@ def delivery_test():
 
 
 # 고객 등록(회원 가입)
-@router.post("/customers_upload", tags=["고객 관리"], summary="고객 등록")
+@router.post("/customer_upload",summary="고객 등록")
 def customeres_upload(
-    login_id: str = Form(..., min_length=1),
-    password: str = Form(..., min_length=1),
-    customer_name: str = Form(..., min_length=1),
-    email: str = Form(..., min_length=1),
-    address: str = Form(...,),
-    phone_number: str = Form(..., min_length=1)
+    customer_id: str = Form(...,min_length=1, max_length=60),
+    login_id: str = Form(...,min_length=2,max_length=60 ),
+    password: str = Form(...,min_length=8,max_length=20 ),
+    customer_name: str = Form(...,min_length=2,max_length=30),
+    email: str = Form(...,max_length=100),
+    address: str = Form(...,max_length=100),
+    phone: str = Form(...,min_length=1,max_length=30)
     ):
-    conn = None
 
     try:
         hashed_password = password_hasher.hash(password)
         conn = get_connection()
-        conn.begin()
 
         with conn.cursor() as curs:
-            customer_id = f"cus_{next_sequence(curs, 'customer')}"
-
-            curs.execute(
-                """
+            sql = """
                 INSERT INTO customers (
-                    customer_id,
+                    customer_id
                     login_id,
                     password_hash,
                     customer_name,
@@ -49,61 +45,34 @@ def customeres_upload(
                     address,
                     phone
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    customer_id,
-                    login_id,
-                    hashed_password,
-                    customer_name,
-                    email,
-                    address,
-                    phone_number,
-                ),
-            )
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """
 
-            append_account_status(curs, customer_id, "ACTIVE")
-
+            curs.execute(sql, (
+                customer_id,
+                login_id,
+                hashed_password,
+                customer_name,
+                email,
+                address,
+                phone or None,
+            ))
         conn.commit()
+        conn.close()
 
         return {
             "result": "OK",
-            "customer_id": customer_id,
-            "customer_name": customer_name,
+            "message" : "회원 가입 완료" 
         }
 
-    except pymysql.IntegrityError as e:
-        if conn is not None:
-            conn.rollback()
+    except Exception as e:
+        return {"result" : "Error",
+                "message" : "회원 가입 불가"}
 
-        if e.args and e.args[0] == 1062:
-            raise HTTPException(
-                status_code=409,
-                detail="이미 사용 중인 아이디 또는 이메일입니다.",
-            )
 
-        raise HTTPException(
-            status_code=400,
-            detail="고객 등록 중 데이터 오류가 발생했습니다.",
-        )
-
-    except Exception:
-        if conn is not None:
-            conn.rollback()
-
-        raise HTTPException(
-            status_code=500,
-            detail="고객 등록 중 오류가 발생했습니다.",
-        )
-
-    finally:
-        if conn is not None:
-            conn.close()
-    
-    
 # 고객 정보 조회
-@router.get("/customers_select", tags=["고객 조회"], summary="고객 조회")
-def customers_select():
+@router.get("/customer_select",summary="고객 조회")
+def customer_select():
     conn = get_connection()
     try:
         with conn.cursor() as curs:
@@ -124,13 +93,13 @@ def customers_select():
 
 
 # 고객 정보 수정
-@router.put("/customers_update", tags=["고객 관리"], summary="고객 정보 수정")
+@router.put("/customer_update",summary="고객 정보 수정")
 def customer_update(
-    customer_id: str = Query(..., min_length=1, max_length=64, pattern=r"\S"),
-    customer_name: str = Form(..., min_length=1, max_length=100),
-    email: str = Form(..., min_length=1, max_length=255),
-    address: str = Form(..., min_length=1, max_length=500),
-    phone_number: str = Form(..., min_length=1, max_length=30),
+    customer_id: str = Query(..., min_length=1, max_length=60),
+    customer_name: str = Form(..., min_length=1, max_length=30),
+    email: str = Form(..., min_length=1, max_length=200),
+    address: str = Form(..., min_length=1, max_length=200),
+    phone: str = Form(..., min_length=1, max_length=30),
 ):
     conn = None
     try:
@@ -142,51 +111,30 @@ def customer_update(
                 (customer_id,),
             )
             if curs.fetchone() is None:
-                raise HTTPException(status_code=404, detail="존재하지 않는 고객입니다.",)
+                raise HTTPException(404, "존재하지 않는 고객입니다.")
             curs.execute(
                 """
                 UPDATE customers
-                SET customer_name = %s, email = %s, address = %s, phone = %s
+                SET customer_name = %s,
+                email = %s,
+                address = %s,
+                phone = %s
                 WHERE customer_id = %s
                 """,
                 (customer_name,
                 email,
                 address,
-                phone_number,
-                customer_id),
-            )
+                phone,
+                customer_id,))
+            
         conn.commit()
         return {"result": "OK",
                 "message": "고객 정보가 수정되었습니다."
                 }
-    except HTTPException:
-        if conn is not None:
-            conn.rollback()
-        raise
-
-    except pymysql.IntegrityError as e:
-        if conn is not None:
-            conn.rollback()
-
-        if e.args and e.args[0] == 1062:
-            raise HTTPException(
-                status_code=409,
-                detail="이미 사용 중인 이메일입니다.",
-            )
-
-        raise HTTPException(
-            status_code=400,
-            detail="고객정보 수정 중 데이터 오류가 발생했습니다.",
-        )
-
     except Exception:
         if conn is not None:
             conn.rollback()
-
-        raise HTTPException(
-            status_code=500,
-            detail="고객정보 수정 중 오류가 발생했습니다.",
-        )
+        raise
 
     finally:
         if conn is not None:
@@ -194,68 +142,26 @@ def customer_update(
 
 
 
-
-# 고객 삭제
-@router.post("/customers_delect",tags=["고객 삭제"],
-                        summary="고객 휴먼 상태 및 회원 탈퇴",
-                        )
+# 고객 탈퇴
+@router.post("/customer_delect",summary="고객 휴먼 상태 및 회원 탈퇴")
 async def customer_delect(
-    seq : str = Form(..., min_length=1)
-    ):
-    conn = None
+    customer_id : str = Form(...)):
     try:
         conn = get_connection()
-        conn.begin()
-
-        with conn.cursor() as curs:
-            curs.execute(
-                """
-                SELECT customer_id, customer_name, address
-                FROM customers
-                WHERE customer_id = %s
-                FOR UPDATE
-                """,
-                (seq,),
-            )
-
-            if curs.fetchone() is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail="존재하지 않는 고객입니다.",
-                )
-
-            status = get_account_status(curs, seq)
-
-            if status == "WITHDRAWN":
-                raise HTTPException(
-                    status_code=409,
-                    detail="이미 탈퇴한 고객입니다.",
-                )
-
-            append_account_status(curs, seq, "WITHDRAWN")
-
+        curs = conn.cursor()
+        sql = """ UPDATE customers
+                    SET account_status = 'WITHDRAWN',
+                    withdrawn_at = NOW()
+                    WHERE customer_id = %s
+                    AND account_status <> 'WITHDRAWN'"""
+        curs.execute(sql, (customer_id,))
         conn.commit()
+        conn.close()
+        return{'result' : 'OK',
+                "message" : '회원 탈퇴가 처리되었습니다.'}
+    except Exception as e:
+        return{'result' : 'Error',
+                "message" : '회원 정보가 없습니다.'}
 
-        return {
-            "result": "OK",
-            "message": "회원탈퇴가 완료되었습니다.",
-        }
 
-    except HTTPException:
-        if conn is not None:
-            conn.rollback()
-        raise
-
-    except Exception:
-        if conn is not None:
-            conn.rollback()
-
-        raise HTTPException(
-            status_code=500,
-            detail="회원탈퇴 처리 중 오류가 발생했습니다.",
-        )
-
-    finally:
-        if conn is not None:
-            conn.close()
 
