@@ -32,7 +32,7 @@ class ReviewApiTests(unittest.TestCase):
     def test_review_routes_do_not_duplicate_customer_routes(self):
         paths = self.client.get("/openapi.json").json()["paths"]
         for path, method in (("/reviews_upload", "post"), ("/reviews_select", "get"),
-                             ("/reviews_update", "put"), ("/reviews_delete/{seq}", "delete")):
+                             ("/reviews_update", "put"), ("/reviews_delete", "delete")):
             self.assertIn(method, paths[path])
         for path in ("/customers_upload", "/customers_select", "/customers_update", "/customers_delect"):
             self.assertIn(path, paths)
@@ -145,50 +145,118 @@ class ReviewApiTests(unittest.TestCase):
         self.connection_mock.assert_not_called()
 
     def test_delete_removes_selected_review(self):
-        self.conn.cursor.return_value.rowcount = 1
-        response = self.client.delete("/reviews_delete/7")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"result": "OK", "deleted_count": 1})
-        self.conn.cursor.return_value.execute.assert_called_once_with(
-            "DELETE FROM reviews WHERE review_id = %s", (7,),
+        cursor = self.cursor
+
+        # 리뷰 작성자 조회 결과
+        cursor.fetchone.side_effect = None
+        cursor.fetchone.return_value = {
+            "customer_id": "cus_1"
+        }
+
+        # 삭제된 행 수
+        cursor.rowcount = 1
+
+        response = self.client.request(
+            "DELETE",
+            "/reviews_delete",
+            data=self.delete_form,
         )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            response.json(),
+            {
+                "result": "OK",
+                "deleted_count": 1,
+                "message": "리뷰가 삭제되었습니다.",
+            },
+        )
+
+        self.assertEqual(cursor.execute.call_count, 2)
+
         self.conn.commit.assert_called_once()
         self.conn.rollback.assert_not_called()
         self.conn.close.assert_called_once()
 
     def test_delete_missing_review_returns_zero_deleted_count(self):
-        self.conn.cursor.return_value.rowcount = 0
-        response = self.client.delete("/reviews_delete/999")
-        self.assertEqual(response.json(), {"result": "OK", "deleted_count": 0,
-                                          "message": "삭제할 리뷰가 없거나 이미 삭제되었습니다."})
-        self.conn.commit.assert_called_once()
-        self.conn.rollback.assert_not_called()
+        self.cursor.fetchone.return_value = None
+        response = self.client.request(
+            "DELETE",
+            "/reviews_delete",
+            data={
+                "review_id": "rev_999",
+                "customer_id": "cus_1",
+            },
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(),
+            {
+                "detail": "존재하지 않는 리뷰입니다.",
+            },
+        )
+        self.conn.commit.assert_not_called()
+        self.conn.rollback.assert_called_once()
         self.conn.close.assert_called_once()
 
     def test_delete_failure_returns_error_and_rolls_back(self):
-        self.conn.cursor.return_value.execute.side_effect = pymysql.OperationalError(2013, "Lost connection")
-        with patch("builtins.print"):
-            response = self.client.delete("/reviews_delete/7")
-        self.assertEqual(response.json(), {"result": "Error"})
+        self.cursor.execute.side_effect = pymysql.OperationalError(2013, "Lost connection")
+        response = self.client.request(
+            "DELETE",
+            "/reviews_delete",
+            data=self.delete_form,
+        )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {
+                "detail": "리뷰 삭제 중 오류가 발생했습니다.",
+            },
+        )
         self.assert_rolled_back()
 
     def test_delete_connection_failure_does_not_close_missing_connection(self):
         self.connection_mock.side_effect = pymysql.OperationalError(2003, "Cannot connect")
-        with patch("builtins.print"):
-            response = self.client.delete("/reviews_delete/7")
-        self.assertEqual(response.json(), {"result": "Error"})
+        response = self.client.request(
+            "DELETE",
+            "/reviews_delete",
+            data=self.delete_form,
+        )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {
+                "detail": "리뷰 삭제 중 오류가 발생했습니다.",
+            },
+        )
         self.conn.commit.assert_not_called()
         self.conn.rollback.assert_not_called()
         self.conn.close.assert_not_called()
 
     def test_delete_rejects_blank_review_id(self):
-        self.assertEqual(self.client.delete("/reviews_delete/%20").status_code, 422)
+        response = self.client.request(
+            "DELETE",
+            "/reviews_delete",
+            data={
+                "review_id": "  ",
+                "customer_id": "cus_1",
+            },
+        )
+        self.assertEqual(response.status_code, 422)
         self.connection_mock.assert_not_called()
 
     def test_delete_rejects_nonnumeric_or_nonpositive_review_id(self):
-        for review_id in ("rev_7", "0", "-1"):
+        for review_id in ("abc", "0", "-1", "rev_0"):
             with self.subTest(review_id=review_id):
-                self.assertEqual(self.client.delete(f"/reviews_delete/{review_id}").status_code, 422)
+                response = self.client.request(
+                    "DELETE",
+                    "/reviews_delete",
+                    data={
+                        "review_id": review_id,
+                        "customer_id": "cus_1",
+                    },
+                )
+                self.assertEqual(response.status_code, 422)
         self.connection_mock.assert_not_called()
 
     def test_writing_failure_rolls_back_and_closes_connection(self):
