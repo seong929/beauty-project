@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Query
 from database import get_connection
 from services.customer.customer_service import next_sequence
 
@@ -54,9 +54,9 @@ def reviews_upload(
 # 리뷰 조회
 @router.get("/reviews_select")
 def reviews_select(
-    review_id: str | None = Form(None),
-    customer_id: str | None = Form(None),
-    cosmetic_id: str | None = Form(None),
+    review_id: str | None = Query(None),
+    customer_id: str | None = Query(None),
+    cosmetic_id: str | None = Query(None),
 ):
     conn = get_connection()
 
