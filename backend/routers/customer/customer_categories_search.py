@@ -21,14 +21,14 @@ def customers_categories():
     try:
         with conn.cursor() as curs:
             curs.execute(
+                ## 최신 용량
                 """
                     SELECT
                     c.cosmetic_id,
                     c.cosmetic_name,
                     m.manufacturer_name,
                     cat.category_name,
-
-                    -- 최신 용량
+                    ## 최신 용량
                     (
                         SELECT vh.volume_text
                         FROM cosmetic_volume_history AS vh
@@ -42,7 +42,9 @@ def customers_categories():
                         LIMIT 1
                     ) AS volume_text,
 
-                    -- 최신 판매 가격
+
+
+                    ## 최신 판매 가격
                     (
                         SELECT ph.sale_price
                         FROM cosmetic_price_history AS ph
@@ -73,7 +75,9 @@ def customers_categories():
                 JOIN categories AS cat
                     ON cat.category_id = c.category_id
 
-                -- 판매 가능한 입고별 재고 합산
+
+
+                ## 판매 가능한 입고별 재고 합산
                 LEFT JOIN (
                     SELECT
                         cosmetic_id,
@@ -89,7 +93,9 @@ def customers_categories():
                 ) AS i
                     ON i.cosmetic_id = c.cosmetic_id
 
-                -- 최신 판매 상태가 판매 중인 상품만 조회
+
+
+                ## 최신 판매 상태가 판매 중인 상품만 조회
                 WHERE (
                     SELECT sh.sale_status
                     FROM cosmetic_sale_status_history AS sh
