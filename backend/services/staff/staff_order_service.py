@@ -1,4 +1,3 @@
-
 import logging
 import pymysql
 
@@ -249,6 +248,14 @@ def update_order_status(
                 raise HTTPException(
                     status_code=404,
                     detail="해당 주문을 찾을 수 없습니다."
+                )
+
+            # SHIPPED로의 진입은 재고 차감 전용 API에서만 허용.
+            # 출고한 주문을 일반 API로 되돌려 재출고하는 것도 차단.
+            if order_status == "SHIPPED" or order["order_status"] == "SHIPPED":
+                raise HTTPException(
+                    status_code=409,
+                    detail="SHIPPED 상태 진입은 전용 출고 API를 이용해야 하며, 출고된 주문은 일반 상태 변경 API로 수정할 수 없습니다."
                 )
 
             # 기존 상태와 동일한 경우

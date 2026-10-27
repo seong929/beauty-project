@@ -12,12 +12,14 @@ from fastapi import (
 
 import schemas.staff.orders as order_schema
 import services.staff.staff_order_service as staff_order_service
+from services.staff.staff_auth_service import require_staff
+from routers.staff.staff_auth_related import router as staff_auth_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/staff",
-    tags=["직원"],
+    tags=["직원-주문"],
 )
 
 
@@ -25,6 +27,7 @@ router = APIRouter(
 @router.get(
     "/order/available",
     response_model=order_schema.OrderListResponse,
+    dependencies=[Depends(require_staff)],
     summary="주문 목록 조회",
     description="""
     진행 중인 주문 목록을 페이지 단위로 조회합니다.
@@ -94,6 +97,7 @@ def get_available_orders(
 @router.get(
     "/orders/{order_id}/items",
     response_model=list[order_schema.OrderItemResponse],
+    dependencies=[Depends(require_staff)],
     summary="주문에 포함된 구매 상품 목록 조회",
     description="""
     특정 주문에 포함된 구매 상품들의 상세 정보를 조회합니다.
@@ -144,6 +148,7 @@ def get_order_items(
 @router.get(
     "/orders/{order_id}",
     summary="주문 상세 정보 조회",
+    dependencies=[Depends(require_staff)],
     description="""
     주문 번호를 이용하여 특정 주문의 상세 정보를 조회합니다.
 
@@ -194,6 +199,7 @@ def get_order_detail(
 @router.patch(
     "/orders/{order_id}/status",
     summary="주문 상태 변경",
+    dependencies=[Depends(require_staff)],
     description="""
     특정 주문의 주문 상태를 변경합니다.
 
