@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 import schemas.staff.orders as order_schema
-import services.staff.staff_service as staff_service
+import services.staff.staff_order_service as staff_order_service
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def get_available_orders(
     ] = None
 ):
     try:
-        rows = staff_service.get_available_order_list_from_page(
+        rows = staff_order_service.get_available_order_list_from_page(
             page=query.page,
             count=query.count,
             asc=query.asc,
@@ -58,7 +58,7 @@ def get_available_orders(
 )
 def get_order_items(order_id: str):
     try:
-        return staff_service.get_items_from_order(order_id)
+        return staff_order_service.get_items_from_order(order_id)
 
     except HTTPException:
         # 서비스에서 발생한 오류를 그대로 전달
