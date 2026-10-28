@@ -19,6 +19,7 @@ from routers.customer.order_item import router as order_item_router
 from routers.customer.delivery import router as customer_delivery_router
 from routers.customer.review import router as review_router
 from routers.delivery.delivery import router as delivery_router
+from routers.delivery.carrier_router import router as carrier_router
 
 
 app = FastAPI(
@@ -46,6 +47,7 @@ app.include_router(staff_auth_router)
 app.include_router(staff_cosmetics_router)
 app.include_router(staff_inventory_router)
 app.include_router(automatic_approval_router)
+app.include_router(carrier_router)
 
 
 @app.get("/")
