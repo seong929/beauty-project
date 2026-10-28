@@ -143,7 +143,10 @@ def get_inventory_grouped_by_status(
     sale_option: SaleOption | None = Query(
         default=None,
         description="판매 옵션"
-    )
+    ),
+    page: int = Query(default=1, ge=1, description="페이지 번호 (1부터)"),
+    count: int = Query(default=20, ge=1, le=100, description="한 페이지의 재고 수"),
+    descending: bool = Query(default=True, description="true: DISCARD부터, false: MAINTAIN부터")
 ):
     return staff_inventory_service.get_inventory_grouped_by_status(
         inventory_status=(
@@ -154,7 +157,10 @@ def get_inventory_grouped_by_status(
         sale_option=(
             sale_option.value
             if sale_option is not None else None
-        )
+        ),
+        page=page,
+        count=count,
+        descending=descending,
     )
 
 

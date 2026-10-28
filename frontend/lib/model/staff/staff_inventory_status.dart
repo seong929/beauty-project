@@ -17,6 +17,10 @@ class InventoryStatusOverview {
     required this.summary,
     required this.inventories,
     required this.cosmeticNames,
+    required this.page,
+    required this.pageSize,
+    required this.total,
+    required this.totalPages,
   });
 
   final Map<InventoryStatus, InventoryStatusSummary> summary;
@@ -24,4 +28,8 @@ class InventoryStatusOverview {
 
   /// cosmetic_id -> cosmetics.cosmetic_name, 상태별 목록의 표시 제목.
   final Map<String, String> cosmeticNames;
+  final int page;
+  final int pageSize;
+  final int total;
+  final int totalPages;
 }

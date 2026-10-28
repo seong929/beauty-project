@@ -5,6 +5,7 @@ import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
 import '../../model/staff/staff_inventory_status.dart';
 import '../../vm/staff/staff_inventory_vm.dart';
+import 'staff_inventory_discard_view.dart';
 
 /// 태블릿 / 휴대폰 공용 재고 화면.
 /// 화면의 넓이에 따라 정보 밀도만 변경하며 API, 인증, 지연 조회 로직은 변경하지 않습니다.
@@ -36,9 +37,10 @@ class StaffInventoryView extends ConsumerWidget {
           if (statusMode)
             IconButton(
               tooltip: descending ? '현재 내림차순 (오름차순으로 변경)' : '현재 오름차순 (내림차순으로 변경)',
-              onPressed: () => ref
-                  .read(staffInventoryStatusDescendingProvider.notifier)
-                  .toggle(),
+              onPressed: () {
+                ref.read(staffInventoryStatusDescendingProvider.notifier).toggle();
+                ref.read(staffStatusPageProvider.notifier).reset();
+              },
               icon: Icon(descending ? Icons.south : Icons.north),
             ),
           Padding(
@@ -64,15 +66,16 @@ class _CosmeticsInventoryPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final result = ref.watch(distinctCosmeticsProvider);
+    final page = ref.watch(staffCosmeticsPageProvider);
+    final result = ref.watch(distinctCosmeticsPageProvider(page));
     return result.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => _Failed(
         message: '화장품 목록을 불러오지 못했습니다.\n$error',
-        onRetry: () => ref.invalidate(distinctCosmeticsProvider),
+        onRetry: () => ref.invalidate(distinctCosmeticsPageProvider(page)),
       ),
       data: (cosmetics) {
-        if (cosmetics.isEmpty) {
+        if (cosmetics.isEmpty && page == 1) {
           return const Center(child: Text('보유중인 화장품이 없습니다'));
         }
         return LayoutBuilder(
@@ -85,17 +88,26 @@ class _CosmeticsInventoryPage extends ConsumerWidget {
                 constraints: const BoxConstraints(maxWidth: StaffInventoryView._maxContentWidth),
                 child: Scrollbar(
                   child: ListView.separated(
+                    key: ValueKey('cosmetics-page-$page'),
                     padding: EdgeInsets.fromLTRB(
                       horizontal,
                       vertical,
                       horizontal,
                       vertical + MediaQuery.paddingOf(context).bottom,
                     ),
-                    itemCount: cosmetics.length + 1,
+                    itemCount: cosmetics.length + 2,
                     separatorBuilder: (_, index) => SizedBox(height: tablet ? 12 : 8),
                     itemBuilder: (context, index) {
                       if (index == 0) {
                         return _ListHeader(total: cosmetics.length, isTablet: tablet);
+                      }
+                      if (index == cosmetics.length + 1) {
+                        return _InventoryPager(
+                          page: page,
+                          totalPages: null,
+                          canNext: cosmetics.length == inventoryPageSize,
+                          onPage: (next) => ref.read(staffCosmeticsPageProvider.notifier).goTo(next),
+                        );
                       }
                       return _CosmeticRow(
                         cosmetic: cosmetics[index - 1],
@@ -138,7 +150,7 @@ class _ListHeader extends StatelessWidget {
             ),
           ),
           Text(
-            '총 $total종 · 항목을 눌러 옵션과 재고 확인',
+            '현재 페이지 $total종 · 항목을 눌러 옵션과 재고 확인',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -309,7 +321,7 @@ class _OptionsBody extends ConsumerWidget {
                     ),
                   for (var i = 0; i < options.length; i++) ...[
                     if (i > 0) SizedBox(height: isTablet ? 10 : 6),
-                    _OptionRow(option: options[i], isTablet: isTablet),
+                    _OptionRow(option: options[i], cosmeticName: cosmeticName, isTablet: isTablet),
                   ],
                 ],
               ),
@@ -319,9 +331,10 @@ class _OptionsBody extends ConsumerWidget {
 }
 
 class _OptionRow extends ConsumerWidget {
-  const _OptionRow({required this.option, required this.isTablet});
+  const _OptionRow({required this.option, required this.cosmeticName, required this.isTablet});
 
   final OptionCosmetics option;
+  final String cosmeticName;
   final bool isTablet;
 
   @override
@@ -406,7 +419,7 @@ class _OptionRow extends ConsumerWidget {
           ),
           if (expanded) ...[
             Divider(height: 1, color: theme.colorScheme.outlineVariant),
-            _InventoryBody(cosmeticId: option.cosmeticId, isTablet: isTablet),
+            _InventoryBody(cosmeticId: option.cosmeticId, cosmeticName: cosmeticName, isTablet: isTablet),
           ],
         ],
       ),
@@ -447,9 +460,10 @@ class _OptionTitle extends StatelessWidget {
 }
 
 class _InventoryBody extends ConsumerWidget {
-  const _InventoryBody({required this.cosmeticId, required this.isTablet});
+  const _InventoryBody({required this.cosmeticId, required this.cosmeticName, required this.isTablet});
 
   final String cosmeticId;
+  final String cosmeticName;
   final bool isTablet;
 
   @override
@@ -488,7 +502,30 @@ class _InventoryBody extends ConsumerWidget {
                     ),
                   for (var i = 0; i < inventory.length; i++) ...[
                     if (i > 0) const Divider(height: 16),
-                    _InventoryRow(batch: inventory[i], isTablet: isTablet),
+                    _InventoryRow(
+                      batch: inventory[i],
+                      isTablet: isTablet,
+                      onTap: inventory[i].inventoryStatus == InventoryStatus.DISCARD &&
+                              inventory[i].stockQuantity > 0
+                          ? () async {
+                              final changed = await Navigator.of(context).push<bool>(
+                                MaterialPageRoute(
+                                  builder: (_) => StaffInventoryDiscardView(
+                                    batch: inventory[i],
+                                    cosmeticName: cosmeticName,
+                                  ),
+                                ),
+                              );
+                              if (changed == true && context.mounted) {
+                                ref.invalidate(cosmeticInventoryProvider(cosmeticId));
+                                ref.invalidate(inventoryStatusOverviewProvider((
+                                  ref.read(staffStatusPageProvider),
+                                  ref.read(staffInventoryStatusDescendingProvider),
+                                )));
+                              }
+                            }
+                          : null,
+                    ),
                   ],
                 ],
               ),
@@ -498,10 +535,11 @@ class _InventoryBody extends ConsumerWidget {
 }
 
 class _InventoryRow extends StatelessWidget {
-  const _InventoryRow({required this.batch, required this.isTablet});
+  const _InventoryRow({required this.batch, required this.isTablet, this.onTap});
 
   final StaffProductInventory batch;
   final bool isTablet;
+  final VoidCallback? onTap;
 
   static String _date(DateTime? date) => date == null
       ? '미설정'
@@ -514,7 +552,9 @@ class _InventoryRow extends StatelessWidget {
     final quantity = '${_formatNumber(batch.stockQuantity)}개';
 
     if (!isTablet) {
-      return Padding(
+      return InkWell(
+        onTap: onTap,
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -525,7 +565,7 @@ class _InventoryRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('$id · $quantity', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  Text('$id · $quantity${onTap == null ? '' : ' · 눌러서 폐기'}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 5),
                   Text(
                     '${batch.inventoryStatus.name} / ${batch.saleOption.name}\n'
@@ -537,10 +577,13 @@ class _InventoryRow extends StatelessWidget {
             ),
           ],
         ),
+        ),
       );
     }
 
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       child: Row(
         children: [
@@ -555,27 +598,31 @@ class _InventoryRow extends StatelessWidget {
           Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
           const SizedBox(width: 12),
           Expanded(flex: 3, child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn))),
+          if (onTap != null) const Icon(Icons.chevron_right),
         ],
+      ),
       ),
     );
   }
 }
 
-/// 상태별 목록은 단일 FastAPI API로 전체 상태를 가져옵니다.
+/// 상태별 전체 집계는 유지하면서 목록은 서버에서 20건씩 페이지 조회합니다.
 /// DISCARD를 처음부터 볼 수 있도록 기본 정렬은 내림차순입니다.
 class _StatusInventoryPage extends ConsumerWidget {
   const _StatusInventoryPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final result = ref.watch(inventoryStatusOverviewProvider);
     final descending = ref.watch(staffInventoryStatusDescendingProvider);
+    final page = ref.watch(staffStatusPageProvider);
+    final lookup = (page, descending);
+    final result = ref.watch(inventoryStatusOverviewProvider(lookup));
 
     return result.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => _Failed(
         message: '재고 상태별 목록을 불러오지 못했습니다.\n$error',
-        onRetry: () => ref.invalidate(inventoryStatusOverviewProvider),
+        onRetry: () => ref.invalidate(inventoryStatusOverviewProvider(lookup)),
       ),
       data: (overview) => LayoutBuilder(
         builder: (context, constraints) {
@@ -599,14 +646,17 @@ class _StatusInventoryPage extends ConsumerWidget {
           // 위젯은 ListView.builder에서 화면에 보이는 항목만 생성합니다.
           final entries = <Object?>[null]; // 요약 헤더
           for (final status in orderedStatuses) {
-            entries.add(status);
             final stocks = byStatus[status]!;
-            if (stocks.isEmpty) {
-              entries.add(_EmptyStatusGroup(status));
-            } else {
+            // 한 페이지에 속한 그룹만 그립니다. 상태별 전체 건수는 헤더에 유지.
+            if (stocks.isNotEmpty) {
+              entries.add(status);
               entries.addAll(stocks);
             }
           }
+          if (overview.inventories.isEmpty) {
+            entries.add(const _EmptyStatusGroup(InventoryStatus.DISCARD));
+          }
+          entries.add('pager');
 
           return Center(
             child: ConstrainedBox(
@@ -614,10 +664,11 @@ class _StatusInventoryPage extends ConsumerWidget {
               child: Scrollbar(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    ref.invalidate(inventoryStatusOverviewProvider);
-                    await ref.read(inventoryStatusOverviewProvider.future);
+                    ref.invalidate(inventoryStatusOverviewProvider(lookup));
+                    await ref.read(inventoryStatusOverviewProvider(lookup).future);
                   },
                   child: ListView.builder(
+                    key: ValueKey('status-page-$page-$descending'),
                     padding: EdgeInsets.fromLTRB(
                       tablet ? 32 : 12,
                       tablet ? 24 : 12,
@@ -627,6 +678,15 @@ class _StatusInventoryPage extends ConsumerWidget {
                     itemCount: entries.length,
                     itemBuilder: (context, index) {
                       final entry = entries[index];
+                      if (entry == 'pager') {
+                        return _InventoryPager(
+                          page: overview.page,
+                          totalPages: overview.totalPages,
+                          total: overview.total,
+                          canNext: overview.page < overview.totalPages,
+                          onPage: (next) => ref.read(staffStatusPageProvider.notifier).goTo(next),
+                        );
+                      }
                       if (entry == null) {
                         return _StatusOverviewHeader(
                           overview: overview,
@@ -654,6 +714,23 @@ class _StatusInventoryPage extends ConsumerWidget {
                           batch: batch,
                           cosmeticName: overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
                           isTablet: tablet,
+                          onTap: batch.inventoryStatus == InventoryStatus.DISCARD &&
+                                  batch.stockQuantity > 0
+                              ? () async {
+                                  final changed = await Navigator.of(context).push<bool>(
+                                    MaterialPageRoute(
+                                      builder: (_) => StaffInventoryDiscardView(
+                                        batch: batch,
+                                        cosmeticName: overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
+                                      ),
+                                    ),
+                                  );
+                                  if (changed == true && context.mounted) {
+                                    ref.invalidate(inventoryStatusOverviewProvider(lookup));
+                                    ref.invalidate(cosmeticInventoryProvider(batch.cosmeticId));
+                                  }
+                                }
+                              : null,
                         ),
                       );
                     },
@@ -806,11 +883,13 @@ class _StatusInventoryCard extends StatelessWidget {
     required this.batch,
     required this.cosmeticName,
     required this.isTablet,
+    this.onTap,
   });
 
   final StaffProductInventory batch;
   final String cosmeticName;
   final bool isTablet;
+  final VoidCallback? onTap;
 
   static String _date(DateTime? date) => date == null
       ? '미설정'
@@ -827,7 +906,10 @@ class _StatusInventoryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
-      child: Padding(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
+        onTap: onTap,
+        child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: isTablet ? 20 : 14,
           vertical: isTablet ? 15 : 12,
@@ -855,6 +937,10 @@ class _StatusInventoryCard extends StatelessWidget {
                   Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
                   const SizedBox(width: 12),
                   Expanded(flex: 3, child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn))),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right),
+                  ],
                 ],
               )
             : Column(
@@ -869,6 +955,8 @@ class _StatusInventoryCard extends StatelessWidget {
                   Text('재고 ${batch.inventoryId} · ${_formatNumber(batch.stockQuantity)}개',
                       style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),
+                  if (onTap != null)
+                    Text('탭하여 폐기 처리', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.error)),
                   Text(
                     '${batch.saleOption.name} · 입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -877,6 +965,56 @@ class _StatusInventoryCard extends StatelessWidget {
                   ),
                 ],
               ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 페이지별 서버 요청을 수행하며, 목록 전체를 메모리에 올리지 않습니다.
+class _InventoryPager extends StatelessWidget {
+  const _InventoryPager({
+    required this.page,
+    required this.canNext,
+    required this.onPage,
+    this.totalPages,
+    this.total,
+  });
+
+  final int page;
+  final int? totalPages;
+  final int? total;
+  final bool canNext;
+  final ValueChanged<int> onPage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: page > 1 ? () => onPage(page - 1) : null,
+            icon: const Icon(Icons.chevron_left),
+            label: const Text('이전'),
+          ),
+          Text(
+            totalPages == null
+                ? '$page 페이지'
+                : '$page / $totalPages 페이지 · 총 ${total ?? 0}건',
+            style: theme.textTheme.titleSmall,
+          ),
+          OutlinedButton.icon(
+            onPressed: canNext ? () => onPage(page + 1) : null,
+            icon: const Icon(Icons.chevron_right),
+            label: const Text('다음'),
+          ),
+        ],
       ),
     );
   }

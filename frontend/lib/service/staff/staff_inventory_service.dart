@@ -200,6 +200,39 @@ class StaffInventoryService {
     return _decodeResponse(response);
   }
 
+  /// 수량 차감은 사용자가 폐기 확인을 누를 때에만 실행합니다.
+  Future<Map<String, dynamic>> discardInventory({
+    required String inventoryId,
+    required int quantity,
+  }) async {
+    if (quantity < 1) {
+      throw const StaffInventoryApiException('폐기 수량은 1 이상이어야 합니다.');
+    }
+    final encodedId = Uri.encodeComponent(inventoryId);
+    final uri = Uri.parse('$baseUrl/staff/inventory/$encodedId/discard');
+    late http.Response response;
+    try {
+      response = await _client.patch(
+        uri,
+        headers: {..._requestHeaders(), 'Content-Type': 'application/json'},
+        body: jsonEncode({'quantity': quantity}),
+      ).timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw StaffInventoryApiException('폐기 요청 실패: $error');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StaffInventoryApiException(
+        '폐기 처리 실패 (HTTP ${response.statusCode}): ${_errorDetail(response)}',
+        response.statusCode,
+      );
+    }
+    final parsed = _decodeResponse(response);
+    if (parsed is! Map) {
+      throw const StaffInventoryApiException('폐기 결과 형식이 올바르지 않습니다.');
+    }
+    return Map<String, dynamic>.from(parsed);
+  }
+
   Object? _decodeResponse(http.Response response) {
     try {
       return jsonDecode(utf8.decode(response.bodyBytes));
@@ -259,25 +292,24 @@ class StaffInventoryService {
     return parsed;
   }
 
-  /// GET /staff/cosmetics/distinct?page=1&count=100
-  /// 서버 페이지 제한(100건)에 맞춰 마지막 페이지까지 조회합니다.
-  Future<List<RootCosmetics>> getDistinctCosmetics() async {
-    const pageSize = 100;
-    final cosmetics = <RootCosmetics>[];
-    var page = 1;
-    while (true) {
-      final rows = _rows(await _get('/staff/cosmetics/distinct', {
-        'page': '$page',
-        'count': '$pageSize',
-      }));
-      cosmetics.addAll(rows.map((json) => RootCosmetics(
-            name: _requiredString(json, 'cosmetic_name'),
-            categoryName: _requiredString(json, 'category_name'),
-          )));
-      if (rows.length < pageSize) return cosmetics;
-      page++;
-    }
+  /// 기존 화장품별 화면도 서버가 지원하는 page/count로 페이지 조회합니다.
+  Future<List<RootCosmetics>> getDistinctCosmeticsPage({
+    required int page,
+    int count = 20,
+  }) async {
+    final rows = _rows(await _get('/staff/cosmetics/distinct', {
+      'page': '$page',
+      'count': '$count',
+    }));
+    return rows.map((json) => RootCosmetics(
+      name: _requiredString(json, 'cosmetic_name'),
+      categoryName: _requiredString(json, 'category_name'),
+    )).toList();
   }
+
+  /// 이전 API 호출부의 호환성을 위해 유지합니다.
+  Future<List<RootCosmetics>> getDistinctCosmetics() async =>
+      getDistinctCosmeticsPage(page: 1);
 
   /// 화장품 행을 펼친 순간에만 요청합니다.
   Future<List<OptionCosmetics>> getCosmeticOptions(String cosmeticName) async {
@@ -323,8 +355,16 @@ class StaffInventoryService {
   /// GET /staff/inventory/by-status
   /// 기존 백엔드 API를 그대로 사용하며, 직원 인증 헤더/쿠키도 자동 적용됩니다.
   /// 반환: {summary: {MAINTAIN: {...}, ...}, inventories: [...]}
-  Future<InventoryStatusOverview> getInventoryGroupedByStatus() async {
-    final response = await _get('/staff/inventory/by-status');
+  Future<InventoryStatusOverview> getInventoryGroupedByStatus({
+    int page = 1,
+    int count = 20,
+    bool descending = true,
+  }) async {
+    final response = await _get('/staff/inventory/by-status', {
+      'page': '$page',
+      'count': '$count',
+      'descending': '$descending',
+    });
     if (response is! Map) {
       throw const StaffInventoryApiException('상태별 재고 API 응답이 객체 형식이 아닙니다.');
     }
@@ -354,10 +394,20 @@ class StaffInventoryService {
         cosmeticNames[id] = name;
       }
     }
+    final rawPagination = responseMap['pagination'];
+    if (rawPagination is! Map) {
+      throw const StaffInventoryApiException(
+        '서버가 페이지 정보를 반환하지 않습니다. backend 라우터와 서비스도 교체하세요.',
+      );
+    }
     return InventoryStatusOverview(
       summary: summary,
       inventories: inventories,
       cosmeticNames: cosmeticNames,
+      page: _asInt(rawPagination['page']),
+      pageSize: _asInt(rawPagination['count']),
+      total: _asInt(rawPagination['total']),
+      totalPages: _asInt(rawPagination['total_pages']),
     );
   }
 

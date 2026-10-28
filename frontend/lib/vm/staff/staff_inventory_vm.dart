@@ -16,8 +16,27 @@ final staffInventoryServiceProvider = Provider<StaffInventoryService>(
 );
 
 /// 화면 진입 시 화장품 종류 목록만 조회합니다.
-final distinctCosmeticsProvider = FutureProvider<List<RootCosmetics>>((ref) {
-  return ref.read(staffInventoryServiceProvider).getDistinctCosmetics();
+const int inventoryPageSize = 20;
+
+class InventoryPageVm extends Notifier<int> {
+  @override
+  int build() => 1;
+  void goTo(int value) { if (value >= 1) state = value; }
+  void reset() => state = 1;
+}
+
+final staffCosmeticsPageProvider = NotifierProvider<InventoryPageVm, int>(
+  InventoryPageVm.new,
+);
+final staffStatusPageProvider = NotifierProvider<InventoryPageVm, int>(
+  InventoryPageVm.new,
+);
+
+final distinctCosmeticsPageProvider =
+    FutureProvider.family<List<RootCosmetics>, int>((ref, page) {
+  return ref.read(staffInventoryServiceProvider).getDistinctCosmeticsPage(
+    page: page, count: inventoryPageSize,
+  );
 });
 
 /// 화장품 행을 펼친 시점에만 옵션 목록을 조회합니다.
@@ -55,8 +74,12 @@ final inventoryExpansionProvider =
 
 /// 상태별 전체 재고는 해당 표시 모드로 진입할 때에만 요청합니다.
 final inventoryStatusOverviewProvider =
-    FutureProvider<InventoryStatusOverview>((ref) {
-  return ref.read(staffInventoryServiceProvider).getInventoryGroupedByStatus();
+    FutureProvider.family<InventoryStatusOverview, (int, bool)>((ref, args) {
+  return ref.read(staffInventoryServiceProvider).getInventoryGroupedByStatus(
+    page: args.$1,
+    count: inventoryPageSize,
+    descending: args.$2,
+  );
 });
 
 enum StaffInventoryDisplayMode { cosmetics, status }
