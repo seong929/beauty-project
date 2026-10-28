@@ -149,15 +149,17 @@ def get_inventory_grouped_by_status(
     params = []
 
     if cosmetic_id is not None:
-        conditions.append("cosmetic_id = %s")
+        conditions.append("pi.cosmetic_id = %s")
         params.append(cosmetic_id)
 
     if sale_option is not None:
-        conditions.append("sale_option = %s")
+        conditions.append("pi.sale_option = %s")
         params.append(sale_option)
 
     base_where = (
-        " WHERE " + " AND ".join(conditions)
+        " WHERE " + " AND ".join(
+            condition.replace("pi.", "") for condition in conditions
+        )
         if conditions else ""
     )
 
@@ -166,7 +168,7 @@ def get_inventory_grouped_by_status(
 
     if inventory_status is not None:
         listing_conditions.append(
-            "inventory_status = %s"
+            "pi.inventory_status = %s"
         )
         listing_params.append(inventory_status)
 
@@ -207,21 +209,24 @@ def get_inventory_grouped_by_status(
             cursor.execute(
                 """
                 SELECT
-                    inventory_id,
-                    cosmetic_id,
-                    stock_quantity,
-                    received_on,
-                    expires_on,
-                    inventory_status,
-                    sale_option
-                FROM product_inventory
+                    pi.inventory_id,
+                    pi.cosmetic_id,
+                    c.cosmetic_name,
+                    pi.stock_quantity,
+                    pi.received_on,
+                    pi.expires_on,
+                    pi.inventory_status,
+                    pi.sale_option
+                FROM product_inventory AS pi
+                INNER JOIN cosmetics AS c
+                    ON c.cosmetic_id = pi.cosmetic_id
                 """
                 + list_where
                 + """
                 ORDER BY
-                    inventory_status ASC,
-                    received_on DESC,
-                    inventory_id ASC
+                    pi.inventory_status ASC,
+                    pi.received_on DESC,
+                    pi.inventory_id ASC
                 """,
                 listing_params
             )

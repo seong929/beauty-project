@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
+import '../../model/staff/staff_inventory_status.dart';
 import '../../service/staff/staff_inventory_service.dart';
 
 final staffInventoryServiceProvider = Provider<StaffInventoryService>(
@@ -49,4 +50,43 @@ class InventoryExpansionVm extends Notifier<Set<String>> {
 final inventoryExpansionProvider =
     NotifierProvider<InventoryExpansionVm, Set<String>>(
   InventoryExpansionVm.new,
+);
+
+
+/// 상태별 전체 재고는 해당 표시 모드로 진입할 때에만 요청합니다.
+final inventoryStatusOverviewProvider =
+    FutureProvider<InventoryStatusOverview>((ref) {
+  return ref.read(staffInventoryServiceProvider).getInventoryGroupedByStatus();
+});
+
+enum StaffInventoryDisplayMode { cosmetics, status }
+
+/// 상단 '변경' 버튼의 화장품별 / 재고 상태별 표시 모드.
+class StaffInventoryDisplayVm extends Notifier<StaffInventoryDisplayMode> {
+  @override
+  StaffInventoryDisplayMode build() => StaffInventoryDisplayMode.cosmetics;
+
+  void toggle() {
+    state = state == StaffInventoryDisplayMode.cosmetics
+        ? StaffInventoryDisplayMode.status
+        : StaffInventoryDisplayMode.cosmetics;
+  }
+}
+
+final staffInventoryDisplayProvider =
+    NotifierProvider<StaffInventoryDisplayVm, StaffInventoryDisplayMode>(
+  StaffInventoryDisplayVm.new,
+);
+
+/// 기본 DESC: DISCARD -> HOLD -> MAINTAIN.
+class StaffInventoryStatusSortVm extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void toggle() => state = !state;
+}
+
+final staffInventoryStatusDescendingProvider =
+    NotifierProvider<StaffInventoryStatusSortVm, bool>(
+  StaffInventoryStatusSortVm.new,
 );

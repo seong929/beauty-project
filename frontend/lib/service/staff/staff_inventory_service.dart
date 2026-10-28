@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
+import '../../model/staff/staff_inventory_status.dart';
 import 'staff_inventory_http_client.dart';
 
 /// 인증, 네트워크 오류, 서버 응답 오류를 구분하기 위한 예외.
@@ -300,21 +301,64 @@ class StaffInventoryService {
   ) async {
     final encodedId = Uri.encodeComponent(cosmeticId);
     final rows = _rows(await _get('/staff/cosmetics/$encodedId/inventory'));
-    return rows.map((json) {
-      final status = _requiredString(json, 'inventory_status');
-      final option = _requiredString(json, 'sale_option');
-      return StaffProductInventory(
-        inventoryId: _requiredString(json, 'inventory_id'),
-        cosmeticId: _requiredString(json, 'cosmetic_id'),
-        stockQuantity: _asInt(json['stock_quantity']),
-        receivedOn: _requiredDate(json['received_on'], 'received_on'),
-        expiresOn: json['expires_on'] == null
-            ? null
-            : _requiredDate(json['expires_on'], 'expires_on'),
-        inventoryStatus: InventoryStatus.values.byName(status),
-        saleOption: SaleOption.values.byName(option),
+    return rows.map(_inventoryFromJson).toList();
+  }
+
+  StaffProductInventory _inventoryFromJson(Map<String, dynamic> json) {
+    final status = _requiredString(json, 'inventory_status');
+    final option = _requiredString(json, 'sale_option');
+    return StaffProductInventory(
+      inventoryId: _requiredString(json, 'inventory_id'),
+      cosmeticId: _requiredString(json, 'cosmetic_id'),
+      stockQuantity: _asInt(json['stock_quantity']),
+      receivedOn: _requiredDate(json['received_on'], 'received_on'),
+      expiresOn: json['expires_on'] == null
+          ? null
+          : _requiredDate(json['expires_on'], 'expires_on'),
+      inventoryStatus: InventoryStatus.values.byName(status),
+      saleOption: SaleOption.values.byName(option),
+    );
+  }
+
+  /// GET /staff/inventory/by-status
+  /// 기존 백엔드 API를 그대로 사용하며, 직원 인증 헤더/쿠키도 자동 적용됩니다.
+  /// 반환: {summary: {MAINTAIN: {...}, ...}, inventories: [...]}
+  Future<InventoryStatusOverview> getInventoryGroupedByStatus() async {
+    final response = await _get('/staff/inventory/by-status');
+    if (response is! Map) {
+      throw const StaffInventoryApiException('상태별 재고 API 응답이 객체 형식이 아닙니다.');
+    }
+    final responseMap = Map<String, dynamic>.from(response);
+    final rawSummary = responseMap['summary'];
+    if (rawSummary is! Map) {
+      throw const StaffInventoryApiException('상태별 재고 API 응답에 summary가 없습니다.');
+    }
+    final summary = <InventoryStatus, InventoryStatusSummary>{};
+    for (final status in InventoryStatus.values) {
+      final item = rawSummary[status.name];
+      if (item is! Map) {
+        throw StaffInventoryApiException('상태별 집계값 ${status.name} 형식이 올바르지 않습니다.');
+      }
+      summary[status] = InventoryStatusSummary(
+        inventoryCount: _asInt(item['inventory_count']),
+        totalQuantity: _asInt(item['total_quantity']),
       );
-    }).toList();
+    }
+    final inventoryRows = _rows(responseMap['inventories']);
+    final inventories = inventoryRows.map(_inventoryFromJson).toList();
+    final cosmeticNames = <String, String>{};
+    for (final row in inventoryRows) {
+      final id = _requiredString(row, 'cosmetic_id');
+      final name = row['cosmetic_name']?.toString().trim();
+      if (name != null && name.isNotEmpty) {
+        cosmeticNames[id] = name;
+      }
+    }
+    return InventoryStatusOverview(
+      summary: summary,
+      inventories: inventories,
+      cosmeticNames: cosmeticNames,
+    );
   }
 
   void dispose() => _client.close();

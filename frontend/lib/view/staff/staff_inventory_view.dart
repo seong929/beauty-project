@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
+import '../../model/staff/staff_inventory_status.dart';
 import '../../vm/staff/staff_inventory_vm.dart';
 
 /// 태블릿 / 휴대폰 공용 재고 화면.
@@ -16,7 +17,9 @@ class StaffInventoryView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isTablet = MediaQuery.sizeOf(context).width >= _tabletBreakpoint;
-    final result = ref.watch(distinctCosmeticsProvider);
+    final mode = ref.watch(staffInventoryDisplayProvider);
+    final statusMode = mode == StaffInventoryDisplayMode.status;
+    final descending = ref.watch(staffInventoryStatusDescendingProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -30,62 +33,82 @@ class StaffInventoryView extends ConsumerWidget {
           ),
         ),
         actions: [
+          if (statusMode)
+            IconButton(
+              tooltip: descending ? '현재 내림차순 (오름차순으로 변경)' : '현재 오름차순 (내림차순으로 변경)',
+              onPressed: () => ref
+                  .read(staffInventoryStatusDescendingProvider.notifier)
+                  .toggle(),
+              icon: Icon(descending ? Icons.south : Icons.north),
+            ),
           Padding(
             padding: EdgeInsets.only(right: isTablet ? 32 : 12),
             child: TextButton.icon(
-              onPressed: () {}, // 기존 요구사항: 향후 표시 모드 변경 연결
-              icon: const Icon(Icons.tune),
-              label: const Text('변경'),
+              onPressed: () => ref.read(staffInventoryDisplayProvider.notifier).toggle(),
+              icon: const Icon(Icons.swap_horiz),
+              label: Text(statusMode ? '화장품별' : '상태별'),
             ),
           ),
         ],
       ),
-      body: result.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => _Failed(
-          message: '화장품 목록을 불러오지 못했습니다.\n$error',
-          onRetry: () => ref.invalidate(distinctCosmeticsProvider),
-        ),
-        data: (cosmetics) {
-          if (cosmetics.isEmpty) {
-            return const Center(child: Text('보유중인 화장품이 없습니다'));
-          }
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final tablet = constraints.maxWidth >= _tabletBreakpoint;
-              final horizontal = tablet ? 32.0 : 12.0;
-              final vertical = tablet ? 24.0 : 12.0;
+      // 두 페이지의 provider는 선택된 모드에서만 watch됩니다.
+      body: statusMode
+          ? const _StatusInventoryPage()
+          : const _CosmeticsInventoryPage(),
+    );
+  }
+}
 
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _maxContentWidth),
-                  child: Scrollbar(
-                    child: ListView.separated(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontal,
-                        vertical,
-                        horizontal,
-                        vertical + MediaQuery.paddingOf(context).bottom,
-                      ),
-                      itemCount: cosmetics.length + 1,
-                      separatorBuilder: (_, index) => SizedBox(height: tablet ? 12 : 8),
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return _ListHeader(total: cosmetics.length, isTablet: tablet);
-                        }
-                        return _CosmeticRow(
-                          cosmetic: cosmetics[index - 1],
-                          isTablet: tablet,
-                        );
-                      },
+class _CosmeticsInventoryPage extends ConsumerWidget {
+  const _CosmeticsInventoryPage();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final result = ref.watch(distinctCosmeticsProvider);
+    return result.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => _Failed(
+        message: '화장품 목록을 불러오지 못했습니다.\n$error',
+        onRetry: () => ref.invalidate(distinctCosmeticsProvider),
+      ),
+      data: (cosmetics) {
+        if (cosmetics.isEmpty) {
+          return const Center(child: Text('보유중인 화장품이 없습니다'));
+        }
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final tablet = constraints.maxWidth >= StaffInventoryView._tabletBreakpoint;
+            final horizontal = tablet ? 32.0 : 12.0;
+            final vertical = tablet ? 24.0 : 12.0;
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: StaffInventoryView._maxContentWidth),
+                child: Scrollbar(
+                  child: ListView.separated(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontal,
+                      vertical,
+                      horizontal,
+                      vertical + MediaQuery.paddingOf(context).bottom,
                     ),
+                    itemCount: cosmetics.length + 1,
+                    separatorBuilder: (_, index) => SizedBox(height: tablet ? 12 : 8),
+                    itemBuilder: (context, index) {
+                      if (index == 0) {
+                        return _ListHeader(total: cosmetics.length, isTablet: tablet);
+                      }
+                      return _CosmeticRow(
+                        cosmetic: cosmetics[index - 1],
+                        isTablet: tablet,
+                      );
+                    },
                   ),
                 ),
-              );
-            },
-          );
-        },
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -538,11 +561,333 @@ class _InventoryRow extends StatelessWidget {
   }
 }
 
+/// 상태별 목록은 단일 FastAPI API로 전체 상태를 가져옵니다.
+/// DISCARD를 처음부터 볼 수 있도록 기본 정렬은 내림차순입니다.
+class _StatusInventoryPage extends ConsumerWidget {
+  const _StatusInventoryPage();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final result = ref.watch(inventoryStatusOverviewProvider);
+    final descending = ref.watch(staffInventoryStatusDescendingProvider);
+
+    return result.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => _Failed(
+        message: '재고 상태별 목록을 불러오지 못했습니다.\n$error',
+        onRetry: () => ref.invalidate(inventoryStatusOverviewProvider),
+      ),
+      data: (overview) => LayoutBuilder(
+        builder: (context, constraints) {
+          final tablet = constraints.maxWidth >= StaffInventoryView._tabletBreakpoint;
+          final statuses = <InventoryStatus>[
+            InventoryStatus.DISCARD,
+            InventoryStatus.HOLD,
+            InventoryStatus.MAINTAIN,
+          ];
+          final orderedStatuses =
+              descending ? statuses : statuses.reversed.toList();
+
+          // API 측 정렬과 무관하게 상태 그룹 순서를 명확히 보장합니다.
+          final byStatus = <InventoryStatus, List<StaffProductInventory>>{
+            for (final status in orderedStatuses) status: <StaffProductInventory>[],
+          };
+          for (final item in overview.inventories) {
+            byStatus[item.inventoryStatus]?.add(item);
+          }
+
+          // 위젯은 ListView.builder에서 화면에 보이는 항목만 생성합니다.
+          final entries = <Object?>[null]; // 요약 헤더
+          for (final status in orderedStatuses) {
+            entries.add(status);
+            final stocks = byStatus[status]!;
+            if (stocks.isEmpty) {
+              entries.add(_EmptyStatusGroup(status));
+            } else {
+              entries.addAll(stocks);
+            }
+          }
+
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: StaffInventoryView._maxContentWidth),
+              child: Scrollbar(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(inventoryStatusOverviewProvider);
+                    await ref.read(inventoryStatusOverviewProvider.future);
+                  },
+                  child: ListView.builder(
+                    padding: EdgeInsets.fromLTRB(
+                      tablet ? 32 : 12,
+                      tablet ? 24 : 12,
+                      tablet ? 32 : 12,
+                      24 + MediaQuery.paddingOf(context).bottom,
+                    ),
+                    itemCount: entries.length,
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      if (entry == null) {
+                        return _StatusOverviewHeader(
+                          overview: overview,
+                          descending: descending,
+                          isTablet: tablet,
+                        );
+                      }
+                      if (entry is InventoryStatus) {
+                        return _StatusGroupHeader(
+                          status: entry,
+                          summary: overview.summary[entry]!,
+                          isTablet: tablet,
+                        );
+                      }
+                      if (entry is _EmptyStatusGroup) {
+                        return const Padding(
+                          padding: EdgeInsets.fromLTRB(14, 0, 14, 16),
+                          child: _EmptyRow('해당 상태의 재고가 없습니다'),
+                        );
+                      }
+                      final batch = entry as StaffProductInventory;
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: tablet ? 10 : 8),
+                        child: _StatusInventoryCard(
+                          batch: batch,
+                          cosmeticName: overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
+                          isTablet: tablet,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _EmptyStatusGroup {
+  const _EmptyStatusGroup(this.status);
+  final InventoryStatus status;
+}
+
+String _statusKorean(InventoryStatus status) => switch (status) {
+  InventoryStatus.DISCARD => '폐기 대상',
+  InventoryStatus.HOLD => '보류',
+  InventoryStatus.MAINTAIN => '정상 유지',
+};
+
+Color _statusColor(BuildContext context, InventoryStatus status) {
+  final theme = Theme.of(context).colorScheme;
+  return switch (status) {
+    InventoryStatus.DISCARD => theme.error,
+    InventoryStatus.HOLD => const Color(0xFF996300),
+    InventoryStatus.MAINTAIN => theme.primary,
+  };
+}
+
+class _StatusOverviewHeader extends StatelessWidget {
+  const _StatusOverviewHeader({
+    required this.overview,
+    required this.descending,
+    required this.isTablet,
+  });
+
+  final InventoryStatusOverview overview;
+  final bool descending;
+  final bool isTablet;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final discard = overview.summary[InventoryStatus.DISCARD]!;
+    return Padding(
+      padding: EdgeInsets.only(bottom: isTablet ? 20 : 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 6,
+            children: [
+              Text('재고 상태별 목록', style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: isTablet ? 22 : 18,
+              )),
+              Text(
+                descending ? '기본 정렬: 폐기 → 보류 → 유지' : '정렬: 유지 → 보류 → 폐기',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(Icons.report_problem_outlined, size: 19, color: theme.colorScheme.error),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  '폐기 대상: ${_formatNumber(discard.inventoryCount)}건 · ${_formatNumber(discard.totalQuantity)}개',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusGroupHeader extends StatelessWidget {
+  const _StatusGroupHeader({
+    required this.status,
+    required this.summary,
+    required this.isTablet,
+  });
+
+  final InventoryStatus status;
+  final InventoryStatusSummary summary;
+  final bool isTablet;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _statusColor(context, status);
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(2, isTablet ? 10 : 8, 2, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 5,
+            height: isTablet ? 34 : 30,
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 3,
+              children: [
+                Text(
+                  '${status.name} · ${_statusKorean(status)}',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: isTablet ? 18 : 16,
+                  ),
+                ),
+                Text(
+                  '${_formatNumber(summary.inventoryCount)}건 / 총 ${_formatNumber(summary.totalQuantity)}개',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusInventoryCard extends StatelessWidget {
+  const _StatusInventoryCard({
+    required this.batch,
+    required this.cosmeticName,
+    required this.isTablet,
+  });
+
+  final StaffProductInventory batch;
+  final String cosmeticName;
+  final bool isTablet;
+
+  static String _date(DateTime? date) => date == null
+      ? '미설정'
+      : '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _statusColor(context, batch.inventoryStatus);
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: isTablet ? 20 : 14,
+          vertical: isTablet ? 15 : 12,
+        ),
+        child: isTablet
+            ? Row(
+                children: [
+                  Icon(Icons.inventory_2_outlined, color: color, size: 24),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 5,
+                    child: _InfoCell(
+                      label: '화장품 이름',
+                      value: cosmeticName,
+                      secondary: '옵션 ID: ${batch.cosmeticId}',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 4, child: _InfoCell(label: '재고 번호', value: batch.inventoryId)),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 2, child: _InfoCell(label: '수량', value: '${_formatNumber(batch.stockQuantity)}개')),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 3, child: _InfoCell(label: '판매 상태', value: batch.saleOption.name)),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 3, child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn))),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(cosmeticName,
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text('옵션 ID: ${batch.cosmeticId}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 4),
+                  Text('재고 ${batch.inventoryId} · ${_formatNumber(batch.stockQuantity)}개',
+                      style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${batch.saleOption.name} · 입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
 class _InfoCell extends StatelessWidget {
-  const _InfoCell({required this.label, required this.value});
+  const _InfoCell({required this.label, required this.value, this.secondary});
 
   final String label;
   final String value;
+  final String? secondary;
 
   @override
   Widget build(BuildContext context) {
@@ -554,6 +899,10 @@ class _InfoCell extends StatelessWidget {
         Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 4),
         Text(value, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        if (secondary != null) ...[
+          const SizedBox(height: 3),
+          Text(secondary!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
       ],
     );
   }
