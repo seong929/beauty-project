@@ -5,7 +5,34 @@ import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
 import '../../model/staff/staff_inventory_status.dart';
 import '../../vm/staff/staff_inventory_vm.dart';
+import 'staff_inventory_batch_detail_view.dart';
 import 'staff_inventory_discard_view.dart';
+
+
+/// DISCARD 재고의 기존 '행 클릭 -> 폐기' 동작은 유지합니다.
+/// 입출고 상세는 모든 상태의 재고에 표시되는 별도 아이콘으로 접근합니다.
+Future<bool?> _openInventoryHistory(BuildContext context, String inventoryId) {
+  return Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      builder: (_) => StaffInventoryBatchDetailView(inventoryId: inventoryId),
+    ),
+  );
+}
+
+Future<bool?> _openInventoryDiscard(
+  BuildContext context,
+  StaffProductInventory batch,
+  String cosmeticName,
+) {
+  return Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      builder: (_) => StaffInventoryDiscardView(
+        batch: batch,
+        cosmeticName: cosmeticName,
+      ),
+    ),
+  );
+}
 
 /// 태블릿 / 휴대폰 공용 재고 화면.
 /// 화면의 넓이에 따라 정보 밀도만 변경하며 API, 인증, 지연 조회 로직은 변경하지 않습니다.
@@ -505,26 +532,31 @@ class _InventoryBody extends ConsumerWidget {
                     _InventoryRow(
                       batch: inventory[i],
                       isTablet: isTablet,
-                      onTap: inventory[i].inventoryStatus == InventoryStatus.DISCARD &&
-                              inventory[i].stockQuantity > 0
-                          ? () async {
-                              final changed = await Navigator.of(context).push<bool>(
-                                MaterialPageRoute(
-                                  builder: (_) => StaffInventoryDiscardView(
-                                    batch: inventory[i],
-                                    cosmeticName: cosmeticName,
-                                  ),
-                                ),
-                              );
-                              if (changed == true && context.mounted) {
-                                ref.invalidate(cosmeticInventoryProvider(cosmeticId));
-                                ref.invalidate(inventoryStatusOverviewProvider((
-                                  ref.read(staffStatusPageProvider),
-                                  ref.read(staffInventoryStatusDescendingProvider),
-                                )));
-                              }
-                            }
-                          : null,
+                      onTap: () async {
+                        final batch = inventory[i];
+                        final discard = batch.inventoryStatus == InventoryStatus.DISCARD &&
+                            batch.stockQuantity > 0;
+                        final changed = discard
+                            ? await _openInventoryDiscard(context, batch, cosmeticName)
+                            : await _openInventoryHistory(context, batch.inventoryId);
+                        if (changed == true && context.mounted) {
+                          ref.invalidate(cosmeticInventoryProvider(cosmeticId));
+                          ref.invalidate(inventoryStatusOverviewProvider((
+                            ref.read(staffStatusPageProvider),
+                            ref.read(staffInventoryStatusDescendingProvider),
+                          )));
+                        }
+                      },
+                      onHistoryTap: () async {
+                        final changed = await _openInventoryHistory(context, inventory[i].inventoryId);
+                        if (changed == true && context.mounted) {
+                          ref.invalidate(cosmeticInventoryProvider(cosmeticId));
+                          ref.invalidate(inventoryStatusOverviewProvider((
+                            ref.read(staffStatusPageProvider),
+                            ref.read(staffInventoryStatusDescendingProvider),
+                          )));
+                        }
+                      },
                     ),
                   ],
                 ],
@@ -535,11 +567,12 @@ class _InventoryBody extends ConsumerWidget {
 }
 
 class _InventoryRow extends StatelessWidget {
-  const _InventoryRow({required this.batch, required this.isTablet, this.onTap});
+  const _InventoryRow({required this.batch, required this.isTablet, this.onTap, this.onHistoryTap});
 
   final StaffProductInventory batch;
   final bool isTablet;
   final VoidCallback? onTap;
+  final VoidCallback? onHistoryTap;
 
   static String _date(DateTime? date) => date == null
       ? '미설정'
@@ -565,7 +598,7 @@ class _InventoryRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('$id · $quantity${onTap == null ? '' : ' · 눌러서 폐기'}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  Text('$id · $quantity', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 5),
                   Text(
                     '${batch.inventoryStatus.name} / ${batch.saleOption.name}\n'
@@ -574,6 +607,11 @@ class _InventoryRow extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            IconButton(
+              tooltip: '입고/출고 내역 확인',
+              onPressed: onHistoryTap,
+              icon: const Icon(Icons.receipt_long_outlined),
             ),
           ],
         ),
@@ -598,6 +636,11 @@ class _InventoryRow extends StatelessWidget {
           Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
           const SizedBox(width: 12),
           Expanded(flex: 3, child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn))),
+          IconButton(
+            tooltip: '입고/출고 내역 확인',
+            onPressed: onHistoryTap,
+            icon: const Icon(Icons.receipt_long_outlined),
+          ),
           if (onTap != null) const Icon(Icons.chevron_right),
         ],
       ),
@@ -714,23 +757,28 @@ class _StatusInventoryPage extends ConsumerWidget {
                           batch: batch,
                           cosmeticName: overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
                           isTablet: tablet,
-                          onTap: batch.inventoryStatus == InventoryStatus.DISCARD &&
-                                  batch.stockQuantity > 0
-                              ? () async {
-                                  final changed = await Navigator.of(context).push<bool>(
-                                    MaterialPageRoute(
-                                      builder: (_) => StaffInventoryDiscardView(
-                                        batch: batch,
-                                        cosmeticName: overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
-                                      ),
-                                    ),
-                                  );
-                                  if (changed == true && context.mounted) {
-                                    ref.invalidate(inventoryStatusOverviewProvider(lookup));
-                                    ref.invalidate(cosmeticInventoryProvider(batch.cosmeticId));
-                                  }
-                                }
-                              : null,
+                          onTap: () async {
+                            final discard = batch.inventoryStatus == InventoryStatus.DISCARD &&
+                                batch.stockQuantity > 0;
+                            final changed = discard
+                                ? await _openInventoryDiscard(
+                                    context,
+                                    batch,
+                                    overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
+                                  )
+                                : await _openInventoryHistory(context, batch.inventoryId);
+                            if (changed == true && context.mounted) {
+                              ref.invalidate(inventoryStatusOverviewProvider(lookup));
+                              ref.invalidate(cosmeticInventoryProvider(batch.cosmeticId));
+                            }
+                          },
+                          onHistoryTap: () async {
+                            final changed = await _openInventoryHistory(context, batch.inventoryId);
+                            if (changed == true && context.mounted) {
+                              ref.invalidate(inventoryStatusOverviewProvider(lookup));
+                              ref.invalidate(cosmeticInventoryProvider(batch.cosmeticId));
+                            }
+                          },
                         ),
                       );
                     },
@@ -884,12 +932,14 @@ class _StatusInventoryCard extends StatelessWidget {
     required this.cosmeticName,
     required this.isTablet,
     this.onTap,
+    this.onHistoryTap,
   });
 
   final StaffProductInventory batch;
   final String cosmeticName;
   final bool isTablet;
   final VoidCallback? onTap;
+  final VoidCallback? onHistoryTap;
 
   static String _date(DateTime? date) => date == null
       ? '미설정'
@@ -937,6 +987,11 @@ class _StatusInventoryCard extends StatelessWidget {
                   Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
                   const SizedBox(width: 12),
                   Expanded(flex: 3, child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn))),
+                  IconButton(
+                    tooltip: '입고/출고 내역 확인',
+                    onPressed: onHistoryTap,
+                    icon: const Icon(Icons.receipt_long_outlined),
+                  ),
                   if (onTap != null) ...[
                     const SizedBox(width: 8),
                     const Icon(Icons.chevron_right),
@@ -956,11 +1011,22 @@ class _StatusInventoryCard extends StatelessWidget {
                       style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),
                   if (onTap != null)
-                    Text('탭하여 폐기 처리', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.error)),
+                    Text(batch.inventoryStatus == InventoryStatus.DISCARD && batch.stockQuantity > 0
+                        ? '탭하여 폐기 · 오른쪽 아이콘으로 입출고 내역'
+                        : '탭하여 상세 조회',
+                      style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary)),
                   Text(
                     '${batch.saleOption.name} · 입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      tooltip: '입고/출고 내역 확인',
+                      onPressed: onHistoryTap,
+                      icon: const Icon(Icons.receipt_long_outlined),
                     ),
                   ),
                 ],

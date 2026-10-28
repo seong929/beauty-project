@@ -1,3 +1,5 @@
+// ignore_for_file: unintended_html_in_doc_comment
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
 import '../../model/staff/staff_inventory_status.dart';
+import '../../model/staff/staff_inventory_history.dart';
 import 'staff_inventory_http_client.dart';
 
 /// 인증, 네트워크 오류, 서버 응답 오류를 구분하기 위한 예외.
@@ -25,10 +28,9 @@ class StaffInventoryService {
   StaffInventoryService({
     required String baseUrl,
     this.enableTemporaryAuth = false,
-    String? accessToken,
+    this._accessToken,
     http.Client? client,
   })  : baseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), ''),
-        _accessToken = accessToken,
         _client = client ?? createStaffInventoryHttpClient();
 
   final String baseUrl;
@@ -174,7 +176,7 @@ class StaffInventoryService {
     return headers;
   }
 
-  Future<Object?> _get(String path, [Map<String, String>? query]) async {
+  Future<Object?> _get(String path, [Map<String, dynamic>? query]) async {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
     debugPrint('[STAFF API] GET $uri');
     late http.Response response;
@@ -199,6 +201,13 @@ class StaffInventoryService {
     }
     return _decodeResponse(response);
   }
+
+  /// 주문 Service 등 다른 직원 화면도 같은 인증된 HTTP 클라이언트를 재사용합니다.
+  /// statuses=... 등의 다중 쿼리 파라미터를 위해 List<String>도 지원합니다.
+  Future<Object?> getAuthorizedJson(
+    String path, [
+    Map<String, dynamic>? query,
+  ]) => _get(path, query);
 
   /// 수량 차감은 사용자가 폐기 확인을 누를 때에만 실행합니다.
   Future<Map<String, dynamic>> discardInventory({
@@ -409,6 +418,43 @@ class StaffInventoryService {
       total: _asInt(rawPagination['total']),
       totalPages: _asInt(rawPagination['total_pages']),
     );
+  }
+
+  /// 재고 카드 선택 시에만 단일 배치 상세를 조회합니다.
+  Future<StaffInventoryBatchDetail> getInventoryBatchDetail(String inventoryId) async {
+    final encoded = Uri.encodeComponent(inventoryId);
+    final result = await _get('/staff/inventory/$encoded');
+    if (result is! Map) {
+      throw const StaffInventoryApiException('재고 상세 응답이 객체가 아닙니다.');
+    }
+    return StaffInventoryBatchDetail.fromJson(Map<String, dynamic>.from(result));
+  }
+
+  /// 입고 이력 섹션을 펼친 시점에만 요청합니다.
+  Future<List<StaffInventoryInbound>> getInventoryInboundHistory(String inventoryId) async {
+    final encoded = Uri.encodeComponent(inventoryId);
+    final result = await _get('/staff/inventory/$encoded/inbound');
+    if (result is! Map) {
+      throw const StaffInventoryApiException('입고 이력 응답이 객체가 아닙니다.');
+    }
+    return parseInventoryInbounds(Map<String, dynamic>.from(result));
+  }
+
+  /// 출고 이력 섹션을 펼친 시점에만 요청, 20건씩 서버 페이지 조회합니다.
+  Future<StaffInventoryOutboundPage> getInventoryOutboundHistory(
+    String inventoryId, {
+    int page = 1,
+    int count = 20,
+  }) async {
+    final encoded = Uri.encodeComponent(inventoryId);
+    final result = await _get('/staff/inventory/$encoded/outbounds', {
+      'page': '$page',
+      'count': '$count',
+    });
+    if (result is! Map) {
+      throw const StaffInventoryApiException('출고 이력 응답이 객체가 아닙니다.');
+    }
+    return StaffInventoryOutboundPage.fromJson(Map<String, dynamic>.from(result));
   }
 
   void dispose() => _client.close();

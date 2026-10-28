@@ -347,3 +347,138 @@ def discard_inventory_stock(
 
     finally:
         conn.close()
+
+"""Inventory history read-only services. Append to services/staff/staff_inventory_service.py."""
+
+
+def get_inventory_detail(inventory_id: str) -> dict:
+    """상품 재고 배치 1건과 표시용 화장품 이름을 조회한다."""
+    if not inventory_id or not inventory_id.strip():
+        raise HTTPException(status_code=400, detail="재고 ID를 입력해야 합니다.")
+    try:
+        conn = get_connection()
+    except pymysql.MySQLError:
+        logger.exception("재고 상세 DB 연결 실패")
+        raise HTTPException(status_code=503, detail="데이터베이스 연결에 실패했습니다.")
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """SELECT pi.inventory_id, pi.cosmetic_id, c.cosmetic_name,
+                          pi.stock_quantity, pi.received_on, pi.expires_on,
+                          pi.inventory_status, pi.sale_option
+                   FROM product_inventory AS pi
+                   INNER JOIN cosmetics AS c ON c.cosmetic_id = pi.cosmetic_id
+                   WHERE pi.inventory_id = %s""",
+                (inventory_id,),
+            )
+            detail = cursor.fetchone()
+            if detail is None:
+                raise HTTPException(status_code=404, detail="존재하지 않는 재고입니다.")
+            return detail
+    except pymysql.MySQLError:
+        logger.exception("재고 상세 SQL 조회 오류: inventory_id=%s", inventory_id)
+        raise HTTPException(status_code=500, detail="재고 상세 조회 중 DB 오류가 발생했습니다.")
+    finally:
+        conn.close()
+
+
+def get_inventory_inbound_history(inventory_id: str) -> dict:
+    """재고 배치의 입고 이력. 현행 스키마는 inventory_id당 0~1건."""
+    if not inventory_id or not inventory_id.strip():
+        raise HTTPException(status_code=400, detail="재고 ID를 입력해야 합니다.")
+    try:
+        conn = get_connection()
+    except pymysql.MySQLError:
+        logger.exception("입고 이력 DB 연결 실패")
+        raise HTTPException(status_code=503, detail="데이터베이스 연결에 실패했습니다.")
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM product_inventory WHERE inventory_id = %s", (inventory_id,)
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="존재하지 않는 재고입니다.")
+            cursor.execute(
+                """SELECT ih.inbound_id, ih.inventory_id, ih.purchase_order_id,
+                          ih.inbound_seq, ih.inbound_quantity, ih.inbound_on
+                   FROM inbound_history AS ih
+                   WHERE ih.inventory_id = %s
+                   ORDER BY ih.inbound_on DESC, ih.inbound_id DESC""",
+                (inventory_id,),
+            )
+            rows = cursor.fetchall()
+            return {"inventory_id": inventory_id, "inbounds": rows}
+    except pymysql.MySQLError:
+        logger.exception("입고 이력 SQL 조회 오류: inventory_id=%s", inventory_id)
+        raise HTTPException(status_code=500, detail="입고 이력 조회 중 DB 오류가 발생했습니다.")
+    finally:
+        conn.close()
+
+
+def get_inventory_outbound_history(inventory_id: str, page: int = 1, count: int = 20) -> dict:
+    """출고 예약 및 확정 건을 N:1 inventory 기준으로 페이지 조회한다."""
+    if not inventory_id or not inventory_id.strip():
+        raise HTTPException(status_code=400, detail="재고 ID를 입력해야 합니다.")
+    if type(page) is not int or page < 1 or type(count) is not int or not 1 <= count <= 100:
+        raise HTTPException(status_code=400, detail="page는 1 이상, count는 1~100이어야 합니다.")
+    try:
+        conn = get_connection()
+    except pymysql.MySQLError:
+        logger.exception("출고 이력 DB 연결 실패")
+        raise HTTPException(status_code=503, detail="데이터베이스 연결에 실패했습니다.")
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM product_inventory WHERE inventory_id = %s", (inventory_id,)
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="존재하지 않는 재고입니다.")
+            cursor.execute(
+                """SELECT COUNT(*) AS total,
+                          COALESCE(SUM(CASE WHEN so.outbound_on IS NULL
+                                        THEN so.outbound_quantity ELSE 0 END), 0) AS reserved_quantity,
+                          COALESCE(SUM(CASE WHEN so.outbound_on IS NOT NULL
+                                        THEN so.outbound_quantity ELSE 0 END), 0) AS confirmed_quantity
+                   FROM stock_outbounds AS so
+                   WHERE so.inventory_id = %s""",
+                (inventory_id,),
+            )
+            totals = cursor.fetchone()
+            total = int(totals["total"])
+            cursor.execute(
+                """SELECT so.order_item_id, so.inventory_id,
+                          oi.order_id, o.order_status,
+                          so.delivery_id, so.outbound_quantity, so.outbound_on,
+                          CASE WHEN so.outbound_on IS NULL THEN 'RESERVED'
+                               ELSE 'CONFIRMED' END AS outbound_status
+                   FROM stock_outbounds AS so
+                   INNER JOIN order_items AS oi
+                     ON oi.order_item_id = so.order_item_id
+                    AND oi.inventory_id = so.inventory_id
+                   INNER JOIN orders AS o ON o.order_id = oi.order_id
+                   WHERE so.inventory_id = %s
+                   ORDER BY CASE WHEN so.outbound_on IS NULL THEN 0 ELSE 1 END ASC,
+                            so.outbound_on DESC, so.order_item_id DESC
+                   LIMIT %s OFFSET %s""",
+                (inventory_id, count, (page - 1) * count),
+            )
+            rows = cursor.fetchall()
+            total_pages = max(1, (total + count - 1) // count)
+            return {
+                "inventory_id": inventory_id,
+                "outbounds": rows,
+                "summary": {
+                    "reserved_quantity": int(totals["reserved_quantity"]),
+                    "confirmed_quantity": int(totals["confirmed_quantity"]),
+                },
+                "pagination": {
+                    "page": page, "count": count, "total": total,
+                    "total_pages": total_pages,
+                    "has_previous": page > 1, "has_next": page < total_pages,
+                },
+            }
+    except pymysql.MySQLError:
+        logger.exception("출고 이력 SQL 조회 오류: inventory_id=%s", inventory_id)
+        raise HTTPException(status_code=500, detail="출고 이력 조회 중 DB 오류가 발생했습니다.")
+    finally:
+        conn.close()

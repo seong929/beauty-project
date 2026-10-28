@@ -191,3 +191,27 @@ def discard_inventory(
         inventory_id=inventory_id,
         quantity=body.quantity
     )
+
+
+
+@router.get("/inventory/{inventory_id}/inbound", summary="재고 배치별 입고 이력 조회")
+def get_inventory_inbound_history(
+    inventory_id: str = Path(min_length=1, description="재고 배치 ID"),
+):
+    return staff_inventory_service.get_inventory_inbound_history(inventory_id)
+
+
+@router.get("/inventory/{inventory_id}/outbounds", summary="재고 배치별 출고 예약·확정 이력 조회")
+def get_inventory_outbound_history(
+    inventory_id: str = Path(min_length=1, description="재고 배치 ID"),
+    page: int = Query(default=1, ge=1, description="페이지 번호"),
+    count: int = Query(default=20, ge=1, le=100, description="페이지당 출고 내역 건수"),
+):
+    return staff_inventory_service.get_inventory_outbound_history(inventory_id, page, count)
+
+
+@router.get("/inventory/{inventory_id}", summary="재고 배치 상세 조회")
+def get_inventory_detail(
+    inventory_id: str = Path(min_length=1, description="재고 배치 ID"),
+):
+    return staff_inventory_service.get_inventory_detail(inventory_id)

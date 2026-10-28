@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
 import '../../model/staff/staff_inventory_status.dart';
+import '../../model/staff/staff_inventory_history.dart';
 import '../../service/staff/staff_inventory_service.dart';
 
 final staffInventoryServiceProvider = Provider<StaffInventoryService>(
@@ -113,3 +114,23 @@ final staffInventoryStatusDescendingProvider =
     NotifierProvider<StaffInventoryStatusSortVm, bool>(
   StaffInventoryStatusSortVm.new,
 );
+
+/// 재고 배치 단위로 캐시하고, 해당 상세 화면에 진입할 때만 조회합니다.
+final inventoryBatchDetailProvider =
+    FutureProvider.family<StaffInventoryBatchDetail, String>((ref, inventoryId) {
+  return ref.read(staffInventoryServiceProvider).getInventoryBatchDetail(inventoryId);
+});
+
+/// 입고 이력은 해당 섹션을 펼친 때에만 조회합니다.
+final inventoryInboundHistoryProvider =
+    FutureProvider.family<List<StaffInventoryInbound>, String>((ref, inventoryId) {
+  return ref.read(staffInventoryServiceProvider).getInventoryInboundHistory(inventoryId);
+});
+
+/// 출고 이력은 (재고 ID, 페이지)별로 캐시합니다.
+final inventoryOutboundHistoryProvider =
+    FutureProvider.family<StaffInventoryOutboundPage, (String, int)>((ref, key) {
+  return ref.read(staffInventoryServiceProvider).getInventoryOutboundHistory(
+    key.$1, page: key.$2,
+  );
+});
