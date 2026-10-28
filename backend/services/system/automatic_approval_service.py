@@ -29,11 +29,11 @@ def _allocate_id(cursor, scope, table, column, prefix):
 
     cursor.execute(
         """
-        INSERT INTO id_counters (scope_name, last_value)
+        INSERT INTO id_counters (scope_name, `last_value`)
         VALUES (%s, LAST_INSERT_ID(%s))
         ON DUPLICATE KEY UPDATE
-            last_value = LAST_INSERT_ID(
-                GREATEST(last_value + 1, %s)
+            `last_value` = LAST_INSERT_ID(
+                GREATEST(`last_value` + 1, %s)
             )
         """,
         (scope, minimum, minimum)
