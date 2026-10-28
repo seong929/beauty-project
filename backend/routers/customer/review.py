@@ -3,6 +3,19 @@ from database import get_connection
 from services.customer.customer_service import next_sequence
 
 router = APIRouter(tags=["리뷰"])
+def next_sequence(cursor, scope_name):
+    """호출자의 DB 트랜잭션 안에서 순번을 할당합니다."""
+    cursor.execute(
+        """INSERT INTO id_counters (scope_name, `last_value`)
+           VALUES (%s, LAST_INSERT_ID(1))
+           ON DUPLICATE KEY UPDATE
+               `last_value` = LAST_INSERT_ID(`last_value` + 1)""",
+        (scope_name,),
+    )
+    cursor.execute("SELECT LAST_INSERT_ID() AS seq")
+    return cursor.fetchone()["seq"]
+
+
 
 
 # 리뷰 등록

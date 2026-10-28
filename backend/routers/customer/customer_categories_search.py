@@ -2,14 +2,6 @@ from fastapi import APIRouter, Form, HTTPException, Query
 import pymysql
 from pwdlib import PasswordHash
 from database import get_connection
-from services.customer.customer_service import (
-    append_account_status,
-    get_account_status,
-    next_sequence,
-)
-
-
-
 router = APIRouter(tags=["고객 상품 조회"])
 password_hasher = PasswordHash.recommended()
 

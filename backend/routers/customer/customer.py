@@ -3,13 +3,41 @@ import pymysql
 from pwdlib import PasswordHash
 
 from database import get_connection
-from services.customer.customer_service import (
-    append_account_status,
-    get_account_status,
-    next_sequence,
-)
-
 router = APIRouter(tags=["고객"])
+
+def next_sequence(cursor, scope_name):
+    """호출자의 DB 트랜잭션 안에서 순번을 할당합니다."""
+    cursor.execute(
+        """INSERT INTO id_counters (scope_name, `last_value`)
+           VALUES (%s, LAST_INSERT_ID(1))
+           ON DUPLICATE KEY UPDATE
+               `last_value` = LAST_INSERT_ID(`last_value` + 1)""",
+        (scope_name,),
+    )
+    cursor.execute("SELECT LAST_INSERT_ID() AS seq")
+    return cursor.fetchone()["seq"]
+
+
+def get_account_status(cursor, customer_id):
+    cursor.execute(
+        """SELECT account_status FROM customer_account_status_history
+           WHERE customer_id = %s ORDER BY changed_on DESC,
+           CAST(SUBSTRING(status_history_id, 5) AS UNSIGNED) DESC LIMIT 1""",
+        (customer_id,),
+    )
+    row = cursor.fetchone()
+    return row["account_status"] if row else "ACTIVE"
+
+
+def append_account_status(cursor, customer_id, account_status):
+    seq = next_sequence(cursor, "history:customer_account_status_history")
+    cursor.execute(
+        """INSERT INTO customer_account_status_history
+           (status_history_id, customer_id, changed_on, account_status)
+           VALUES (%s, %s, CURRENT_DATE(), %s)""",
+        (f"csh_{seq}", customer_id, account_status),
+    )
+
 password_hasher = PasswordHash.recommended()
 
 
@@ -30,44 +58,31 @@ def customeres_upload(
     phone: str = Form(...,min_length=1,max_length=30)
     ):
 
+    hashed_password = password_hasher.hash(password)
+    conn = get_connection()
     try:
-        hashed_password = password_hasher.hash(password)
-        conn = get_connection()
-
+        conn.begin()
         with conn.cursor() as curs:
-            sql = """
-                INSERT INTO customers (
-                    customer_id,
-                    login_id,
-                    password_hash,
-                    customer_name,
-                    email,
-                    address,
-                    phone
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-
-            curs.execute(sql, (
-                customer_id,
-                login_id,
-                hashed_password,
-                customer_name,
-                email,
-                address,
-                phone or None,
-            ))
+            curs.execute(
+                """INSERT INTO customers (
+                    customer_id, login_id, password_hash,
+                    customer_name, email, address, phone
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (customer_id, login_id, hashed_password,
+                 customer_name, email, address, phone),
+            )
+            append_account_status(curs, customer_id, "ACTIVE")
         conn.commit()
+        return {"result": "OK", "customer_id": customer_id,
+                "message": "회원 가입 완료"}
+    except pymysql.err.IntegrityError:
+        conn.rollback()
+        raise HTTPException(409, "중복된 고객 ID, 로그인 ID 또는 이메일입니다.")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
         conn.close()
-
-        return {
-            "result": "OK",
-            "message" : "회원 가입 완료" 
-        }
-
-    except Exception as e:
-        return {"result" : "Error",
-                "message" : "회원 가입 불가"}
 
 
 # 고객 정보 조회
@@ -144,24 +159,24 @@ def customer_update(
 
 # 고객 탈퇴
 @router.post("/customer_delect",summary="고객 휴먼 상태 및 회원 탈퇴")
-async def customer_delect(
-    customer_id : str = Form(...)):
+def customer_delect(customer_id: str = Form(..., min_length=1, max_length=64)):
+    conn = get_connection()
     try:
-        conn = get_connection()
-        curs = conn.cursor()
-        sql = """ UPDATE customers
-                    SET account_status = 'WITHDRAWN',
-                    withdrawn_at = NOW()
-                    WHERE customer_id = %s
-                    AND account_status <> 'WITHDRAWN'"""
-        curs.execute(sql, (customer_id,))
+        conn.begin()
+        with conn.cursor() as curs:
+            curs.execute(
+                "SELECT customer_id FROM customers WHERE customer_id=%s FOR UPDATE",
+                (customer_id,),
+            )
+            if curs.fetchone() is None:
+                raise HTTPException(404, "존재하지 않는 고객입니다.")
+            if get_account_status(curs, customer_id) == "WITHDRAWN":
+                raise HTTPException(409, "이미 탈퇴 처리된 고객입니다.")
+            append_account_status(curs, customer_id, "WITHDRAWN")
         conn.commit()
+        return {"result": "OK", "message": "회원 탈퇴가 처리되었습니다."}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
         conn.close()
-        return{'result' : 'OK',
-                "message" : '회원 탈퇴가 처리되었습니다.'}
-    except Exception as e:
-        return{'result' : 'Error',
-                "message" : '회원 정보가 없습니다.'}
-
-
-

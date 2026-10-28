@@ -1,129 +1,286 @@
+"""고객 주문 조회 및 장바구니 일괄 결제."""
+from fastapi import APIRouter, Query, HTTPException
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+from enum import Enum
 from decimal import Decimal
+import logging
+import pymysql
 
-from fastapi import APIRouter, HTTPException, Query
 from database import get_connection
 
 router = APIRouter(tags=["주문 관리"])
 
-# 고객별 주문 조회
-@router.get("/orders", summary="고객별 주문 조회")
-def get_orders(customer_id: str):
-    
-    conn = get_connection()
-    
-    try:
-        
-        with conn.cursor() as curs:
-            curs.execute(
-                """
-                SELECT o.order_id, o.ordered_at AS order_date,
-                    c.customer_id, c.customer_name,
-                    p.cosmetic_name AS product_name, oi.inventory_id,
-                    oi.purchase_quantity AS quantity,
-                    oi.purchase_unit_price AS unit_price,
-                       oi.purchase_quantity * oi.purchase_unit_price AS item_amount,
-                    (
-                        SELECT SUM(items.purchase_quantity * items.purchase_unit_price)
-                        FROM order_items AS items WHERE items.order_id = o.order_id
-                    ) AS order_total_amount,
-                    o.order_status
-                FROM orders AS o
-                JOIN customers AS c ON c.customer_id = o.customer_id
-                JOIN order_items AS oi ON oi.order_id = o.order_id
-                JOIN product_inventory AS i ON i.inventory_id = oi.inventory_id
-                JOIN cosmetics AS p ON p.cosmetic_id = i.cosmetic_id
-                WHERE o.customer_id = %s
-                ORDER BY o.ordered_at DESC, o.order_seq DESC, oi.order_item_seq
-                """,
-                (customer_id,),
-            )
-            rows = curs.fetchall()
-        return {"results": rows}
-    finally:
-        conn.close()
-        
+logger = logging.getLogger(__name__)
+
+class SaleOption(str, Enum):
+    NORMAL = "NORMAL"
+    NEAR_EXPIRY = "NEAR_EXPIRY"
 
 
-# 고객별 주문 결제
-@router.post("/orders_pay", summary="주문 결제")
-def order_pay(
-    order_id: str = Query(..., min_length=1, max_length=30),
-    customer_id: str = Query(..., min_length=1, max_length=30),
-):
+class CheckoutItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cosmetic_id: str = Field(min_length=1, max_length=160)
+    quantity: int = Field(gt=0, le=10000)
+    sale_option: SaleOption = Field(description="NORMAL: 일반 / NEAR_EXPIRY: 사용기한 임박")
+
+
+class CheckoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    customer_id: str = Field(min_length=1, max_length=64)
+    shipping_address: str = Field(min_length=1, max_length=500)
+    items: list[CheckoutItem] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_items(self):
+        keys = [item.cosmetic_id for item in self.items]
+        if len(keys) != len(set(keys)):
+            raise ValueError("동일 화장품이 중복되었습니다. 상품별 수량을 하나로 합쳐주세요.")
+        if not self.shipping_address.strip():
+            raise ValueError("배송지 주소를 입력해야 합니다.")
+        return self
+
+
+
+def next_sequence(cursor, scope_name):
+    """호출자의 DB 트랜잭션 안에서 순번을 할당합니다."""
+    cursor.execute(
+        """INSERT INTO id_counters (scope_name, `last_value`)
+           VALUES (%s, LAST_INSERT_ID(1))
+           ON DUPLICATE KEY UPDATE
+               `last_value` = LAST_INSERT_ID(`last_value` + 1)""",
+        (scope_name,),
+    )
+    cursor.execute("SELECT LAST_INSERT_ID() AS seq")
+    return cursor.fetchone()["seq"]
+
+
+def get_account_status(cursor, customer_id):
+    cursor.execute(
+        """SELECT account_status FROM customer_account_status_history
+           WHERE customer_id = %s ORDER BY changed_on DESC,
+           CAST(SUBSTRING(status_history_id, 5) AS UNSIGNED) DESC LIMIT 1""",
+        (customer_id,),
+    )
+    row = cursor.fetchone()
+    return row["account_status"] if row else "ACTIVE"
+
+
+
+def checkout_cart(data: CheckoutRequest) -> dict:
+    customer_id = data.customer_id.strip()
+    address = data.shipping_address.strip()
     conn = None
     try:
         conn = get_connection()
         conn.begin()
-        with conn.cursor() as curs:
-            # 주문 조회 및 동시 처리 방지를 위한 잠금
-            curs.execute(
-                """
-                SELECT order_id, customer_id, order_status
-                FROM orders
-                WHERE order_id = %s
-                FOR UPDATE
-                """,
-                (order_id,),
+        with conn.cursor() as cur:
+            # 고객 행을 장바구니 변경 및 동일 고객의 중복 결제에 대한 직렬화 지점으로 사용.
+            cur.execute(
+                "SELECT customer_id FROM customers WHERE customer_id = %s FOR UPDATE",
+                (customer_id,),
             )
-            order = curs.fetchone()
-            if order is None:
-                raise HTTPException(404, "존재하지 않는 주문입니다.")
-            if str(order["customer_id"]) != customer_id:
-                raise HTTPException(403, "본인의 주문만 결제할 수 있습니다.")
-            if order["order_status"] != "PENDING":
-                raise HTTPException(409, "결제 대기 중인 주문만 결제할 수 있습니다.")
+            if cur.fetchone() is None:
+                raise HTTPException(404, "존재하지 않는 고객입니다.")
+            if get_account_status(cur, customer_id) != "ACTIVE":
+                raise HTTPException(409, "활성 고객만 결제할 수 있습니다.")
 
-            # 주문한 결제금액한 표기
-            curs.execute(
-                """
-                SELECT
-                    purchase_quantity,
-                    purchase_unit_price
-                FROM order_items
-                WHERE order_id = %s
-                FOR UPDATE
-                """,
-                (order_id,),
+            cur.execute(
+                """SELECT cosmetic_id FROM cart_items
+                   WHERE customer_id = %s ORDER BY cosmetic_id FOR UPDATE""",
+                (customer_id,),
             )
-            items = curs.fetchall()
-            if not items:
-                raise HTTPException(409, "주문에 포함된 상품이 없습니다.")
+            cart_ids = {row["cosmetic_id"] for row in cur.fetchall()}
+            selected_ids = {item.cosmetic_id for item in data.items}
+            if not cart_ids:
+                raise HTTPException(409, "장바구니가 비어 있습니다.")
+            if cart_ids != selected_ids:
+                raise HTTPException(
+                    409, "결제 상품 목록이 현재 장바구니와 일치하지 않습니다."
+                )
 
-            total_amount = Decimal("0")
-            for item in items:
-                quantity = int(item["purchase_quantity"])
-                unit_price = Decimal(str(item["purchase_unit_price"]))
-                if quantity <= 0 or unit_price < 0:
-                    raise HTTPException(409, "주문 상품의 수량과 가격을 확인하세요.")
-                total_amount += quantity * unit_price
+            # 상품별 가격·판매상태를 DB에서 확인. 입력 가격은 신뢰하지 않는다.
+            products = {}
+            for cosmetic_id in sorted(cart_ids):
+                cur.execute(
+                    """SELECT c.cosmetic_name,
+                           (SELECT sh.sale_status
+                              FROM cosmetic_sale_status_history AS sh
+                             WHERE sh.cosmetic_id = c.cosmetic_id
+                             ORDER BY sh.changed_on DESC,
+                                      CAST(SUBSTRING_INDEX(sh.change_id, '_', -1) AS UNSIGNED) DESC
+                             LIMIT 1) AS sale_status,
+                           (SELECT ph.sale_price
+                              FROM cosmetic_price_history AS ph
+                             WHERE ph.cosmetic_id = c.cosmetic_id
+                             ORDER BY ph.changed_on DESC,
+                                      CAST(SUBSTRING_INDEX(ph.change_id, '_', -1) AS UNSIGNED) DESC
+                             LIMIT 1) AS sale_price
+                       FROM cosmetics AS c WHERE c.cosmetic_id = %s FOR UPDATE""",
+                    (cosmetic_id,),
+                )
+                product = cur.fetchone()
+                if not product or product["sale_status"] != "ON_SALE" or product["sale_price"] is None:
+                    raise HTTPException(409, f"판매할 수 없는 화장품: {cosmetic_id}")
+                price = Decimal(str(product["sale_price"]))
+                if price < 0:
+                    raise HTTPException(409, f"상품 가격이 올바르지 않습니다: {cosmetic_id}")
+                products[cosmetic_id] = (product["cosmetic_name"], price)
 
-            # 이미 처리된 주문은 다시 결제할 수 없도록 상태 조건을 함께 적용한다.
-            curs.execute(
-                """
-                UPDATE orders
-                SET order_status = 'PAID'
-                WHERE order_id = %s
-                  AND order_status = 'PENDING'
-                """,
-                (order_id,),
+            # 1. orders 생성 -> 이후 order_items에 order_id + seq 사용.
+            order_seq = int(next_sequence(cur, "order"))
+            order_id = f"ord_{order_seq}"
+            cur.execute(
+                """INSERT INTO orders
+                   (order_id, customer_id, order_seq, order_status, shipping_address)
+                   VALUES (%s, %s, %s, 'PAID', %s)""",
+                (order_id, customer_id, order_seq, address),
             )
-            if curs.rowcount != 1:
-                raise HTTPException(409, "주문 상태가 변경되어 결제할 수 없습니다.")
 
-        # 결제 완료 상태를 저장한다.
+            total = Decimal("0")
+            seq = 0
+            purchased = []
+
+            # 인벤토리 잠금 순서를 일정하게 유지해 동시 고객 결제 충돌을 최소화한다.
+            for item in sorted(data.items, key=lambda x: x.cosmetic_id):
+                option = item.sale_option.value
+                name, price = products[item.cosmetic_id]
+                cur.execute(
+                    """SELECT inventory_id, stock_quantity
+                         FROM product_inventory
+                        WHERE cosmetic_id = %s AND sale_option = %s
+                          AND inventory_status = 'MAINTAIN'
+                          AND stock_quantity > 0
+                          AND (expires_on IS NULL OR expires_on >= CURRENT_DATE())
+                        ORDER BY expires_on IS NULL, expires_on, received_on, inventory_id
+                        FOR UPDATE""",
+                    (item.cosmetic_id, option),
+                )
+                batches = cur.fetchall()
+                if sum(int(row["stock_quantity"]) for row in batches) < item.quantity:
+                    raise HTTPException(
+                        409, f"재고 부족: {item.cosmetic_id} ({option})"
+                    )
+
+                remaining = item.quantity
+                for batch in batches:
+                    if remaining == 0:
+                        break
+                    count = min(remaining, int(batch["stock_quantity"]))
+                    if count <= 0:
+                        continue
+                    inv_id = batch["inventory_id"]
+                    cur.execute(
+                        """UPDATE product_inventory
+                              SET stock_quantity = stock_quantity - %s
+                            WHERE inventory_id = %s AND stock_quantity >= %s
+                              AND inventory_status = 'MAINTAIN'""",
+                        (count, inv_id, count),
+                    )
+                    if cur.rowcount != 1:
+                        raise HTTPException(409, "결제 도중 재고가 변경되었습니다.")
+
+                    seq += 1
+                    order_item_id = f"{order_id}_{seq}"
+                    cur.execute(
+                        """INSERT INTO order_items
+                           (order_item_id, order_id, order_item_seq, inventory_id,
+                            purchase_quantity, purchase_unit_price, sale_option)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                        (order_item_id, order_id, seq, inv_id, count, price, option),
+                    )
+                    # 출고 대기 행: 배송 확정 전에는 delivery_id/outbound_on 모두 NULL.
+                    cur.execute(
+                        """INSERT INTO stock_outbounds
+                           (order_item_id, inventory_id, delivery_id,
+                            outbound_quantity, outbound_on)
+                           VALUES (%s, %s, NULL, %s, NULL)""",
+                        (order_item_id, inv_id, count),
+                    )
+                    remaining -= count
+                    purchased.append({
+                        "order_item_id": order_item_id,
+                        "cosmetic_id": item.cosmetic_id,
+                        "cosmetic_name": name,
+                        "inventory_id": inv_id,
+                        "quantity": count,
+                        "sale_option": option,
+                        "unit_price": price,
+                    })
+                total += price * item.quantity
+
+            # 2. 결제 성공 시 장바구니 전체 삭제 (동일 트랜잭션).
+            cur.execute("DELETE FROM cart_items WHERE customer_id = %s", (customer_id,))
+            if cur.rowcount != len(cart_ids):
+                raise HTTPException(409, "장바구니가 변경되어 결제를 완료할 수 없습니다.")
+
         conn.commit()
         return {
-            "result": "OK",
-            "order_id": order_id,
-            "customer_id": customer_id,
-            "order_status": "PAID",
-            "total_amount": total_amount,
-            "payment_amount": total_amount,
+            "result": "OK", "order_id": order_id,
+            "customer_id": customer_id, "order_status": "PAID",
+            "shipping_address": address, "total_amount": total,
+            "items": purchased, "cart_cleared": True,
+            "payment_note": "결제 완료 상태 저장(외부 결제 승인 연동 없음)",
         }
+    except HTTPException:
+        if conn is not None:
+            conn.rollback()
+        raise
+    except pymysql.MySQLError:
+        if conn is not None:
+            conn.rollback()
+        logger.exception("결제 SQL 실패: customer_id=%s", customer_id)
+        raise HTTPException(500, "결제 처리 중 DB 오류가 발생했습니다.")
     except Exception:
         if conn is not None:
             conn.rollback()
+        logger.exception("결제 실패: customer_id=%s", customer_id)
         raise
     finally:
         if conn is not None:
             conn.close()
+
+
+
+
+
+@router.get("/orders", summary="고객별 주문 및 주문상품 조회")
+def get_orders(customer_id: str = Query(..., min_length=1, max_length=64)):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT o.order_id, o.ordered_at AS order_date,
+                          o.customer_id, o.shipping_address, o.order_status,
+                          oi.order_item_id, oi.order_item_seq,
+                          c.cosmetic_id, c.cosmetic_name AS product_name,
+                          oi.inventory_id, oi.sale_option,
+                          oi.purchase_quantity AS quantity,
+                          oi.purchase_unit_price AS unit_price,
+                          oi.purchase_quantity * oi.purchase_unit_price AS item_amount,
+                          (SELECT SUM(x.purchase_quantity * x.purchase_unit_price)
+                             FROM order_items AS x WHERE x.order_id = o.order_id)
+                             AS order_total_amount,
+                          so.delivery_id, so.outbound_on
+                     FROM orders AS o
+                     LEFT JOIN order_items AS oi ON oi.order_id = o.order_id
+                     LEFT JOIN product_inventory AS pi ON pi.inventory_id = oi.inventory_id
+                     LEFT JOIN cosmetics AS c ON c.cosmetic_id = pi.cosmetic_id
+                     LEFT JOIN stock_outbounds AS so ON so.order_item_id = oi.order_item_id
+                    WHERE o.customer_id = %s
+                    ORDER BY o.order_seq DESC, oi.order_item_seq""",
+                (customer_id,),
+            )
+            return {"results": cur.fetchall()}
+    finally:
+        conn.close()
+
+
+@router.post("/orders_pay", summary="장바구니 일괄 결제 및 주문 생성")
+def order_pay(data: CheckoutRequest):
+    """장바구니의 모든 화장품을 선택한 수량/판매 옵션으로 결제."""
+    return checkout_cart(data)
+
+# 기존 main.py가 routers.customer.order만 등록한 경우에도 취소 API 사용 가능.
+# main.py에서 order_item.router를 별도 등록하지 마세요(중복 경로 방지).
+from routers.customer.order_item import router as order_item_router
+router.include_router(order_item_router)
