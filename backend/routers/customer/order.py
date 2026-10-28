@@ -1,4 +1,4 @@
-"""고객 주문 조회 및 장바구니 일괄 결제."""
+"""고객 주문 조회 및 상품 결제(장바구니 등록 여부와 무관)."""
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from enum import Enum
@@ -91,16 +91,13 @@ def checkout_cart(data: CheckoutRequest) -> dict:
             )
             cart_ids = {row["cosmetic_id"] for row in cur.fetchall()}
             selected_ids = {item.cosmetic_id for item in data.items}
-            if not cart_ids:
-                raise HTTPException(409, "장바구니가 비어 있습니다.")
-            if cart_ids != selected_ids:
-                raise HTTPException(
-                    409, "결제 상품 목록이 현재 장바구니와 일치하지 않습니다."
-                )
+            # 장바구니 외의 상품도 바로 구매할 수 있다.
+            # 결제 성공 시 실제 장바구니에 있는 주문 상품만 삭제한다.
+            cart_purchased_ids = sorted(cart_ids & selected_ids)
 
             # 상품별 가격·판매상태를 DB에서 확인. 입력 가격은 신뢰하지 않는다.
             products = {}
-            for cosmetic_id in sorted(cart_ids):
+            for cosmetic_id in sorted(selected_ids):
                 cur.execute(
                     """SELECT c.cosmetic_name,
                            (SELECT sh.sale_status
@@ -208,28 +205,46 @@ def checkout_cart(data: CheckoutRequest) -> dict:
                     })
                 total += price * item.quantity
 
-            # 2. 결제 성공 시 장바구니 전체 삭제 (동일 트랜잭션).
-            cur.execute("DELETE FROM cart_items WHERE customer_id = %s", (customer_id,))
-            if cur.rowcount != len(cart_ids):
-                raise HTTPException(409, "장바구니가 변경되어 결제를 완료할 수 없습니다.")
+            # 2. 결제 성공 시 주문한 상품 중 장바구니에 있던 상품만 삭제.
+            # 주문 생성·재고 차감·장바구니 삭제는 동일 트랜잭션에서 처리한다.
+            if cart_purchased_ids:
+                placeholders = ", ".join(["%s"] * len(cart_purchased_ids))
+                cur.execute(
+                    f"DELETE FROM cart_items WHERE customer_id = %s "
+                    f"AND cosmetic_id IN ({placeholders})",
+                    (customer_id, *cart_purchased_ids),
+                )
+                if cur.rowcount != len(cart_purchased_ids):
+                    raise HTTPException(409, "장바구니가 변경되어 결제를 완료할 수 없습니다.")
 
         conn.commit()
         return {
             "result": "OK", "order_id": order_id,
             "customer_id": customer_id, "order_status": "PAID",
             "shipping_address": address, "total_amount": total,
-            "items": purchased, "cart_cleared": True,
+            "items": purchased,
+            "cart_cleared": len(cart_ids - selected_ids) == 0,
+            "cart_removed_cosmetic_ids": cart_purchased_ids,
             "payment_note": "결제 완료 상태 저장(외부 결제 승인 연동 없음)",
         }
     except HTTPException:
         if conn is not None:
             conn.rollback()
         raise
-    except pymysql.MySQLError:
+    except pymysql.MySQLError as exc:
         if conn is not None:
             conn.rollback()
         logger.exception("결제 SQL 실패: customer_id=%s", customer_id)
-        raise HTTPException(500, "결제 처리 중 DB 오류가 발생했습니다.")
+        # 구형 DB는 stock_outbounds에 order_item_id 컬럼이 없어서
+        # 결제 마지막 단계에서 MySQL 1054 오류가 발생한다.
+        if (exc.args and exc.args[0] == 1054
+                and "order_item_id" in str(exc)):
+            raise HTTPException(
+                status_code=503,
+                detail=("DB 스키마가 구버전입니다. "
+                        "stock_outbounds 마이그레이션을 먼저 적용하세요."),
+            ) from exc
+        raise HTTPException(500, "결제 처리 중 DB 오류가 발생했습니다.") from exc
     except Exception:
         if conn is not None:
             conn.rollback()
@@ -275,9 +290,9 @@ def get_orders(customer_id: str = Query(..., min_length=1, max_length=64)):
         conn.close()
 
 
-@router.post("/orders_pay", summary="장바구니 일괄 결제 및 주문 생성")
+@router.post("/orders_pay", summary="상품 결제 및 주문 생성")
 def order_pay(data: CheckoutRequest):
-    """장바구니의 모든 화장품을 선택한 수량/판매 옵션으로 결제."""
+    """요청한 상품을 결제하고 장바구니에 있던 구매 상품만 제거."""
     return checkout_cart(data)
 
 # 기존 main.py가 routers.customer.order만 등록한 경우에도 취소 API 사용 가능.
