@@ -12,7 +12,7 @@ def decide_return(
 
     try:
         with conn.cursor() as cursor:
-            # 1. 관리자 권한 확인
+            # 1. 본사 직원 및 관리자 권한 확인
             cursor.execute(
                 """
                 SELECT employee_role
@@ -27,10 +27,10 @@ def decide_return(
                     status_code=404,
                     detail="존재하지 않는 직원입니다.",
                 )
-            if employee["employee_role"] != "ADMIN":
+            if employee["employee_role"] not in ("ADMIN", "STAFF"):
                 raise HTTPException(
                     status_code=403,
-                    detail="관리자만 반품을 승인하거나 반려할 수 있습니다.",
+                    detail="본사 직원 또는 관리자만 반품을 처리할 수 있습니다.",
                 )
             
             # 2. 반품 요청 조회 및 잠금
@@ -150,10 +150,10 @@ def assign_return_pickup(return_id: str, employee_id: str):
                     status_code=404,
                     detail="존재하지 않는 직원입니다.",
                 )
-            if employee["employee_role"] != "ADMIN":
+            if employee["employee_role"] not in ("ADMIN", "STAFF"):
                 raise HTTPException(
                     status_code=403,
-                    detail="관리자만 반품 회수를 요청할 수 있습니다.",
+                    detail="본사 직원 또는 관리자만 반품 회수를 요청할 수 있습니다.",
                 )
 
             # 2. 반품 요청 조회 및 잠금
@@ -293,10 +293,10 @@ def update_return_pickup_status(
                     detail="존재하지 않는 직원입니다.",
                 )
 
-            if employee["employee_role"] != "ADMIN":
+            if employee["employee_role"] not in ("ADMIN", "STAFF"):
                 raise HTTPException(
                     status_code=403,
-                    detail="관리자만 회수 상태를 변경할 수 있습니다.",
+                    detail="본사 직원과 관리자만 회수 상태를 변경할 수 있습니다.",
                 )
 
             # 2. 반품 요청 조회 및 잠금
@@ -404,10 +404,10 @@ def receive_return(return_id: str, employee_id: str):
                 detail="직원 정보를 찾을 수 없습니다.",
             )
 
-        if employee["employee_role"] != "ADMIN":
+        if employee["employee_role"] not in ("ADMIN", "STAFF"):
             raise HTTPException(
                 status_code=403,
-                detail="본사 관리자만 반품 상품을 수령 처리할 수 있습니다.",
+                detail="본사 직원과 본사 관리자만 반품 상품을 수령 처리할 수 있습니다.",
             )
 
         # 2. 반품 요청 조회 및 잠금
@@ -492,10 +492,10 @@ def complete_return_inspection(
                 detail="직원 정보를 찾을 수 없습니다.",
             )
 
-        if employee["employee_role"] != "ADMIN":
+        if employee["employee_role"] not in ("ADMIN", "STAFF"):
             raise HTTPException(
                 status_code=403,
-                detail="본사 관리자만 반품 검수를 완료할 수 있습니다.",
+                detail="본사 직원과 본사 관리자만 반품 검수를 완료할 수 있습니다.",
             )
 
         # 2. 반품 요청 조회 및 잠금
