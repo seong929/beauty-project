@@ -18,6 +18,7 @@ from routers.customer.order import router as order_router
 from routers.customer.order_item import router as order_item_router
 from routers.customer.delivery import router as customer_delivery_router
 from routers.customer.review import router as review_router
+from routers.customer.return_api import router as customer_return_router
 from routers.delivery.delivery import router as delivery_router
 from routers.delivery.carrier_router import router as carrier_router
 
@@ -40,6 +41,7 @@ app.include_router(order_router)
 app.include_router(order_item_router)
 app.include_router(customer_delivery_router)
 app.include_router(review_router)
+app.include_router(customer_return_router)
 app.include_router(delivery_router)
 app.include_router(staff_order_router)
 app.include_router(admin_return_router)
