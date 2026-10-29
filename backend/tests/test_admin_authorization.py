@@ -109,8 +109,17 @@ class OutboundInventoryTests(unittest.TestCase):
         cursor.fetchone.side_effect = [
             {"order_id": "o1", "order_status": "PREPARING"}, {"carrier_id": "c1"}, None,
         ]
-        cursor.fetchall.return_value = [{"order_item_id": "oi1", "purchase_quantity": 2,
-                                         "outbound_quantity": 2, "delivery_id": None, "outbound_on": None}]
+        cursor.fetchall.return_value = [
+            {
+                "order_item_id": "oi1",
+                "inventory_id": "inv1",
+                "purchase_quantity": 2,
+                "outbound_quantity": 2,
+                "outbound_inventory_id": "inv1",
+                "delivery_id": None,
+                "outbound_on": None,
+            }
+        ]
         cursor.rowcount = 1
         with patch.object(outbound_service, "get_connection", return_value=connection):
             result = outbound_service.create_outbound(OutboundCreateRequest(order_id="o1", carrier_id="c1"))
