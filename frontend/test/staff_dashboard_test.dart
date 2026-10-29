@@ -62,6 +62,7 @@ void main() {
 
     expect(find.text('품의 관리'), findsNothing);
     expect(find.text('발주 관리'), findsNothing);
+    expect(find.text('발주처 관리'), findsNothing);
     expect(requested, isEmpty);
     final sections = <String, Type>{
       '재고 관리': StaffInventoryView,

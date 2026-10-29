@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../model/admin/outbound.dart';
 import '../../vm/admin/outbound_notifier.dart';
+import '../../vm/admin/management_vm.dart';
 
 class OutboundPage extends ConsumerWidget {
   const OutboundPage({super.key});
@@ -60,6 +61,12 @@ class OutboundPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final outboundState = ref.watch(outboundProvider);
     final outboundNotifier = ref.read(outboundProvider.notifier);
+    final carriers = ref.watch(carrierChoicesProvider);
+    final validCarrier =
+        carriers.asData?.value.any(
+          (item) => item['carrier_id'] == outboundState.selectedCarrierId,
+        ) ??
+        false;
 
     // 첫 화면 진입 시 주문 목록 조회
     // build()에서 직접 API를 호출하지 않도록 별도 처리
@@ -75,6 +82,7 @@ class OutboundPage extends ConsumerWidget {
                 ? null
                 : () {
                     outboundNotifier.fetchPreparingOrders();
+                    ref.invalidate(carrierChoicesProvider);
                   },
             icon: const Icon(Icons.refresh),
           ),
@@ -123,22 +131,49 @@ class OutboundPage extends ConsumerWidget {
                     ),
                   ),
 
-                TextFormField(
-                  initialValue: outboundState.selectedCarrierId,
-                  decoration: const InputDecoration(
-                    labelText: '배송업체 ID',
-                    helperText: '등록된 배송업체의 ID를 입력해 주세요.',
-                    border: OutlineInputBorder(),
+                carriers.when(
+                  loading: () => const LinearProgressIndicator(),
+                  error: (error, _) => TextButton(
+                    onPressed: () => ref.invalidate(carrierChoicesProvider),
+                    child: Text('배송업체 조회 실패 · 다시 시도: $error'),
                   ),
-                  enabled: !outboundState.isProcessing,
-                  onChanged: (value) =>
-                      outboundNotifier.selectCarrier(value.trim()),
+                  data: (items) => items.isEmpty
+                      ? const Text('등록된 배송업체가 없습니다.')
+                      : DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            validCarrier
+                                ? outboundState.selectedCarrierId
+                                : 'no-carrier',
+                          ),
+                          initialValue: validCarrier
+                              ? outboundState.selectedCarrierId
+                              : null,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: '배송업체 선택',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final item in items)
+                              DropdownMenuItem(
+                                value: item['carrier_id'] as String,
+                                child: Text(item['carrier_name'] as String),
+                              ),
+                          ],
+                          onChanged: outboundState.isProcessing
+                              ? null
+                              : (value) {
+                                  if (value != null) {
+                                    outboundNotifier.selectCarrier(value);
+                                  }
+                                },
+                        ),
                 ),
 
                 const SizedBox(height: 12),
 
                 ElevatedButton.icon(
-                  onPressed: outboundState.canProcessOutbound
+                  onPressed: outboundState.canProcessOutbound && validCarrier
                       ? () async {
                           final confirmed = await showDialog<bool>(
                             context: context,

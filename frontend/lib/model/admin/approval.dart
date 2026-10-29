@@ -1,4 +1,3 @@
-
 class Approval {
   final String approvalId;
   final String cosmeticId;
@@ -14,6 +13,13 @@ class Approval {
   final String? decisionStatus;
   final String? employeeId;
   final DateTime? decidedAt;
+  final String? manufacturerId;
+  final String? manufacturerName;
+  final String? categoryId;
+  final int? cosmeticNameSeq;
+  final String? volumeText;
+  final String? purchaseOrderId;
+  final int? orderQuantity;
 
   const Approval({
     required this.approvalId,
@@ -30,6 +36,13 @@ class Approval {
     this.decisionStatus,
     this.employeeId,
     this.decidedAt,
+    this.manufacturerId,
+    this.manufacturerName,
+    this.categoryId,
+    this.cosmeticNameSeq,
+    this.volumeText,
+    this.purchaseOrderId,
+    this.orderQuantity,
   });
 
   factory Approval.fromJson(Map<String, dynamic> json) {
@@ -50,6 +63,13 @@ class Approval {
       decidedAt: json['decided_at'] == null
           ? null
           : DateTime.parse(json['decided_at'] as String),
+      manufacturerId: json['manufacturer_id'] as String?,
+      manufacturerName: json['manufacturer_name'] as String?,
+      categoryId: json['category_id'] as String?,
+      cosmeticNameSeq: json['cosmetic_name_seq'] as int?,
+      volumeText: json['volume_text'] as String?,
+      purchaseOrderId: json['purchase_order_id'] as String?,
+      orderQuantity: json['order_quantity'] as int?,
     );
   }
 }

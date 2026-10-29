@@ -1,0 +1,80 @@
+{
+  "bucket": "cosmetics-store-image-storage.firebasestorage.app",
+  "products": [
+    {
+      "cosmetic_id": "mfr_seed_aurora_cat_seed_makeup_1_1",
+      "cosmetic_name": "데일리 틴트",
+      "source_image": null,
+      "reason": "압축파일에 틴트 이미지가 없음",
+      "object_name": "cosmetics/mfr_seed_aurora_cat_seed_makeup_1_1/image",
+      "status": "unmatched"
+    },
+    {
+      "cosmetic_id": "mfr_seed_aurora_cat_seed_skincare_1_1",
+      "cosmetic_name": "수분 진정 토너",
+      "source_image": "소나무 진정 시카 토너.png",
+      "reason": "예시 상품명에 맞춘 동일 종류의 유사 이미지",
+      "object_name": "cosmetics/mfr_seed_aurora_cat_seed_skincare_1_1/image",
+      "status": "uploaded",
+      "sha256": "d8dec3a21a4a2148e4909b021dd97c1bfb390e4279be61fd5302c57146287402"
+    },
+    {
+      "cosmetic_id": "mfr_seed_aurora_cat_seed_skincare_1_2",
+      "cosmetic_name": "수분 진정 토너",
+      "source_image": "소나무 진정 시카 토너.png",
+      "reason": "예시 상품명에 맞춘 동일 종류의 유사 이미지",
+      "object_name": "cosmetics/mfr_seed_aurora_cat_seed_skincare_1_2/image",
+      "status": "uploaded",
+      "sha256": "d8dec3a21a4a2148e4909b021dd97c1bfb390e4279be61fd5302c57146287402"
+    },
+    {
+      "cosmetic_id": "mfr_seed_aurora_cat_seed_skincare_9901_1",
+      "cosmetic_name": "자동품의 테스트 - 재고 0",
+      "source_image": null,
+      "reason": "자동품의 테스트용 상품: 대표 제품이 없음",
+      "object_name": "cosmetics/mfr_seed_aurora_cat_seed_skincare_9901_1/image",
+      "status": "unmatched"
+    },
+    {
+      "cosmetic_id": "mfr_seed_aurora_cat_seed_skincare_9902_1",
+      "cosmetic_name": "자동품의 테스트 - 재고 15",
+      "source_image": null,
+      "reason": "자동품의 테스트용 상품: 대표 제품이 없음",
+      "object_name": "cosmetics/mfr_seed_aurora_cat_seed_skincare_9902_1/image",
+      "status": "unmatched"
+    },
+    {
+      "cosmetic_id": "mfr_seed_bloom_cat_seed_hair_1_1",
+      "cosmetic_name": "허브 샴푸",
+      "source_image": null,
+      "reason": "압축파일에 샴푸 이미지가 없음",
+      "object_name": "cosmetics/mfr_seed_bloom_cat_seed_hair_1_1/image",
+      "status": "unmatched"
+    },
+    {
+      "cosmetic_id": "mfr_seed_bloom_cat_seed_hair_9903_1",
+      "cosmetic_name": "자동품의 테스트 - 재고 30",
+      "source_image": null,
+      "reason": "자동품의 테스트용 상품: 대표 제품이 없음",
+      "object_name": "cosmetics/mfr_seed_bloom_cat_seed_hair_9903_1/image",
+      "status": "unmatched"
+    },
+    {
+      "cosmetic_id": "mfr_seed_mirae_cat_seed_body_1_1",
+      "cosmetic_name": "리페어 바디로션",
+      "source_image": "세라마이드 아토 로션.png",
+      "reason": "예시 상품명에 맞춘 동일 종류의 유사 이미지",
+      "object_name": "cosmetics/mfr_seed_mirae_cat_seed_body_1_1/image",
+      "status": "uploaded",
+      "sha256": "5e39ae47195fc8a82bbb271288ae7e7ade5aa73730a2c6b35177b0e033ee0120"
+    },
+    {
+      "cosmetic_id": "mfr_seed_mirae_cat_seed_skincare_1_1",
+      "cosmetic_name": "더마 선크림",
+      "source_image": null,
+      "reason": "압축파일에 선크림 이미지가 없음",
+      "object_name": "cosmetics/mfr_seed_mirae_cat_seed_skincare_1_1/image",
+      "status": "unmatched"
+    }
+  ]
+}

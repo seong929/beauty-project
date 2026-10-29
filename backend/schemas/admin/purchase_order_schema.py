@@ -34,3 +34,6 @@ class PurchaseOrderListResponse(BaseModel):
     purchase_status: str
     unit_supply_price: Decimal
     order_total_amount: Decimal
+    category_id: str | None = None
+    cosmetic_name_seq: int | None = None
+    volume_text: str | None = None

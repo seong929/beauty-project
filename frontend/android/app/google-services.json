@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "772694796423",
+    "project_id": "cosmetics-store-image-storage",
+    "storage_bucket": "cosmetics-store-image-storage.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:772694796423:android:196d3ece7393130235f022",
+        "android_client_info": {
+          "package_name": "com.example.beauty_project"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUVV-f3uFFsOGATwFed2idyv7PwY-EsPE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

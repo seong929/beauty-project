@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 import 'view/admin/admin_dashboard_page.dart';
 import 'view/auth/login_page.dart';
@@ -12,8 +14,13 @@ import 'vm/admin/purchase_order_notifier.dart';
 import 'vm/admin/staff_purchase_order_notifier.dart';
 import 'vm/staff/staff_inventory_vm.dart';
 import 'vm/staff/staff_order_vm.dart';
+import 'vm/admin/management_vm.dart';
 
-void main() => runApp(const ProviderScope(child: MyApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const ProviderScope(child: MyApp()));
+}
 
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
@@ -49,6 +56,7 @@ class _MyAppState extends ConsumerState<MyApp> {
         ref.invalidate(staffOrdersPageProvider);
         ref.invalidate(staffOrderDetailProvider);
         ref.invalidate(staffOrderItemsProvider);
+        ref.invalidate(cosmeticImageProvider);
       }
     });
     return MaterialApp(

@@ -86,7 +86,24 @@ def get_distinct_cosmetics(
             params.extend([count, offset])
 
             cursor.execute(sql, params)
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+            if rows:
+                names = list(dict.fromkeys(row['cosmetic_name'] for row in rows))
+                placeholders = ','.join(['%s'] * len(names))
+                option_sql = f'''SELECT c.cosmetic_id, c.cosmetic_name, cc.category_name
+                                 FROM cosmetics c JOIN categories cc ON cc.category_id=c.category_id
+                                 WHERE c.cosmetic_name IN ({placeholders})'''
+                if inventory_status is not None:
+                    option_sql += ' AND EXISTS (SELECT 1 FROM product_inventory pi WHERE pi.cosmetic_id=c.cosmetic_id ' + filter_clause + ')'
+                option_sql += ' ORDER BY c.manufacturer_id, c.category_id, c.cosmetic_name_seq, c.cosmetic_type_seq'
+                cursor.execute(option_sql, [*names, *filter_params])
+                options = cursor.fetchall()
+                grouped = {}
+                for option in options:
+                    grouped.setdefault((option['cosmetic_name'], option['category_name']), []).append(option['cosmetic_id'])
+                for row in rows:
+                    row['cosmetic_ids'] = grouped.get((row['cosmetic_name'], row['category_name']), [])
+            return rows
 
     except pymysql.MySQLError:
         logger.exception(

@@ -8,20 +8,20 @@ import '../../vm/auth/auth_notifier.dart';
 import '../staff/staff_inventory_view.dart';
 import '../staff/staff_order_view.dart';
 import 'approval_page.dart';
-import 'cosmetic_create_page.dart';
 import 'delivery_page.dart';
 import 'outbound_page.dart';
 import 'purchase_order_page.dart';
+import 'manufacturer_page.dart';
 import 'return_management_page.dart';
 import 'staff_purchase_order_page.dart';
 
 enum _Section {
   dashboard('대시보드', Icons.dashboard_outlined),
-  cosmetic('상품 등록', Icons.add_box_outlined),
   inventory('재고 관리', Icons.inventory_2_outlined),
   order('주문 관리', Icons.receipt_long_outlined),
   approval('품의 관리', Icons.fact_check_outlined),
   purchase('발주 관리', Icons.shopping_cart_outlined),
+  manufacturer('발주처 관리', Icons.business_outlined),
   inbound('입고 관리', Icons.move_to_inbox_outlined),
   outbound('출고 관리', Icons.outbox_outlined),
   delivery('배송 관리', Icons.local_shipping_outlined),
@@ -51,18 +51,18 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
   bool _canAccess(_Section section) =>
       ref.read(authProvider).isAdmin ||
       !{
-        _Section.cosmetic,
         _Section.approval,
         _Section.purchase,
+        _Section.manufacturer,
       }.contains(section);
 
   Widget _page() => switch (_selected) {
     _Section.dashboard => _DashboardOverview(onSelect: _select),
-    _Section.cosmetic => const CosmeticCreatePage(),
     _Section.inventory => const StaffInventoryView(),
     _Section.order => const StaffOrderView(),
     _Section.approval => const ApprovalPage(embedded: true),
     _Section.purchase => const PurchaseOrderPage(),
+    _Section.manufacturer => const ManufacturerPage(),
     _Section.inbound => const StaffPurchaseOrderPage(),
     _Section.outbound => const _OutboundEntry(),
     _Section.delivery => const DeliveryPage(),

@@ -12,6 +12,9 @@ class PurchaseOrder {
   final String purchaseStatus;
   final double unitSupplyPrice;
   final double orderTotalAmount;
+  final String? categoryId;
+  final int? cosmeticNameSeq;
+  final String? volumeText;
 
   const PurchaseOrder({
     required this.purchaseOrderId,
@@ -26,6 +29,9 @@ class PurchaseOrder {
     required this.purchaseStatus,
     required this.unitSupplyPrice,
     required this.orderTotalAmount,
+    this.categoryId,
+    this.cosmeticNameSeq,
+    this.volumeText,
   });
 
   factory PurchaseOrder.fromJson(Map<String, dynamic> json) {
@@ -40,12 +46,11 @@ class PurchaseOrder {
       orderedOn: DateTime.parse(json['ordered_on'] as String),
       orderQuantity: json['order_quantity'] as int,
       purchaseStatus: json['purchase_status'] as String,
-      unitSupplyPrice: double.parse(
-        json['unit_supply_price'].toString(),
-      ),
-      orderTotalAmount: double.parse(
-        json['order_total_amount'].toString(),
-      ),
+      unitSupplyPrice: double.parse(json['unit_supply_price'].toString()),
+      orderTotalAmount: double.parse(json['order_total_amount'].toString()),
+      categoryId: json['category_id'] as String?,
+      cosmeticNameSeq: json['cosmetic_name_seq'] as int?,
+      volumeText: json['volume_text'] as String?,
     );
   }
   // STAFF가 입고할 수 있는 발주인지 확인
@@ -100,21 +105,15 @@ class PurchaseOrderCreateResponse {
     required this.message,
   });
 
-  factory PurchaseOrderCreateResponse.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory PurchaseOrderCreateResponse.fromJson(Map<String, dynamic> json) {
     return PurchaseOrderCreateResponse(
       purchaseOrderId: json['purchase_order_id'] as String,
       approvalId: json['approval_id'] as String,
       purchaseOrderSeq: json['purchase_order_seq'] as int,
       manufacturerId: json['manufacturer_id'] as String,
       orderQuantity: json['order_quantity'] as int,
-      unitSupplyPrice: double.parse(
-        json['unit_supply_price'].toString(),
-      ),
-      orderTotalAmount: double.parse(
-        json['order_total_amount'].toString(),
-      ),
+      unitSupplyPrice: double.parse(json['unit_supply_price'].toString()),
+      orderTotalAmount: double.parse(json['order_total_amount'].toString()),
       purchaseStatus: json['purchase_status'] as String,
       message: json['message'] as String,
     );

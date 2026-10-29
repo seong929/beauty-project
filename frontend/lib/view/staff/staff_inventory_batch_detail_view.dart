@@ -139,7 +139,7 @@ class _StaffInventoryBatchDetailViewState
                 const SizedBox(height: 14),
                 _HistorySection(
                   title: '입고 이력',
-                  subtitle: 'inbound_history · 입고 번호와 발주 내역',
+                  subtitle: '입고 번호와 발주 내역',
                   icon: Icons.move_to_inbox_outlined,
                   expanded: _inboundExpanded,
                   onToggle: () => setState(() => _inboundExpanded = !_inboundExpanded),
@@ -150,7 +150,7 @@ class _StaffInventoryBatchDetailViewState
                 const SizedBox(height: 14),
                 _HistorySection(
                   title: '출고 이력',
-                  subtitle: 'stock_outbounds · 예약 및 배송 확정 내역',
+                  subtitle: '출고 예약 및 확정 내역',
                   icon: Icons.local_shipping_outlined,
                   expanded: _outboundExpanded,
                   onToggle: () => setState(() => _outboundExpanded = !_outboundExpanded),
@@ -161,18 +161,6 @@ class _StaffInventoryBatchDetailViewState
                           onPageChange: (page) => setState(() => _outboundPage = page),
                         )
                       : null,
-                ),
-                const SizedBox(height: 15),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    '출고 예약은 outbound_on이 없는 건이며, 출고 확정 건과 구분됩니다. '
-                    '현재 재고 수량은 별도 저장값이므로 입고·출고 합계에서 자동 계산한 값이 아닙니다. '
-                    '주문 취소로 삭제된 출고 예약 및 별도 기록되지 않은 폐기는 이 두 이력에 나타나지 않을 수 있습니다.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
                 ),
               ],
             ),

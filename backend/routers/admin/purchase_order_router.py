@@ -10,19 +10,16 @@ router = APIRouter(
     tags=["본사 관리자 - 발주 관리"],
 )
 
-@router.post(
-    "",
-    response_model=PurchaseOrderCreateResponse,
-    status_code=201,
-    summary="발주 등록"
-)
+
+@router.post("", response_model=PurchaseOrderCreateResponse, status_code=201,
+             summary="기존 승인 품의의 발주 복구", deprecated=True)
 def register_purchase_order(
     data: PurchaseOrderCreateRequest,
     employee: dict = Depends(require_admin),
 ):
+    # 기존에 승인되었지만 발주가 없는 품의만 복구한다.
+    # 신규 승인은 품의 결재 API에서 발주와 함께 생성된다.
     return create_purchase_order(data)
-
-
 
 @router.get(
     "",

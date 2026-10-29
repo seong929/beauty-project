@@ -310,4 +310,8 @@ $RECYCLE.BIN/
 # Local project archive
 /beauty-project.zip
 
+# Automatic approval scheduler runtime checkpoint
+/backend/.automatic_approval_daily_state.json
+/backend/..automatic_approval_daily_state.json.*.tmp
+
 # End of https://www.toptal.com/developers/gitignore/api/windows,python,flutter,dart,visualstudiocode

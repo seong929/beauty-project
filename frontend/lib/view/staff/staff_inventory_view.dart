@@ -5,9 +5,13 @@ import '../../model/staff/staff_cosmetic.dart';
 import '../../model/staff/staff_product_inventory.dart';
 import '../../model/staff/staff_inventory_status.dart';
 import '../../vm/staff/staff_inventory_vm.dart';
+import '../../vm/auth/auth_notifier.dart';
+import '../admin/cosmetic_create_page.dart';
+import 'cosmetic_option_detail_view.dart';
+import '../common/cosmetic_image.dart';
+import '../../vm/admin/management_vm.dart';
 import 'staff_inventory_batch_detail_view.dart';
 import 'staff_inventory_discard_view.dart';
-
 
 /// DISCARD 재고의 기존 '행 클릭 -> 폐기' 동작은 유지합니다.
 /// 입출고 상세는 모든 상태의 재고에 표시되는 별도 아이콘으로 접근합니다.
@@ -26,10 +30,8 @@ Future<bool?> _openInventoryDiscard(
 ) {
   return Navigator.of(context).push<bool>(
     MaterialPageRoute(
-      builder: (_) => StaffInventoryDiscardView(
-        batch: batch,
-        cosmeticName: cosmeticName,
-      ),
+      builder: (_) =>
+          StaffInventoryDiscardView(batch: batch, cosmeticName: cosmeticName),
     ),
   );
 }
@@ -55,18 +57,45 @@ class StaffInventoryView extends ConsumerWidget {
         toolbarHeight: isTablet ? 72 : 56,
         titleSpacing: isTablet ? 32 : 16,
         title: Text(
-          '직원 재고 관리',
+          '재고 관리',
           style: TextStyle(
             fontSize: isTablet ? 23 : 20,
             fontWeight: FontWeight.w700,
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: '새로고침',
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              invalidateStaffInventoryLists(ref);
+              ref.invalidate(cosmeticImageProvider);
+              ref.read(cosmeticImagesRevisionProvider.notifier).refresh();
+            },
+          ),
+          if (!statusMode && ref.watch(authProvider).isAdmin)
+            IconButton(
+              tooltip: '상품 등록',
+              icon: const Icon(Icons.add_box_outlined),
+              onPressed: () async {
+                final created = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => const CosmeticCreatePage()),
+                );
+                if (created == true && context.mounted) {
+                  invalidateStaffInventoryLists(ref);
+                  ref.read(staffCosmeticsPageProvider.notifier).reset();
+                }
+              },
+            ),
           if (statusMode)
             IconButton(
-              tooltip: descending ? '현재 내림차순 (오름차순으로 변경)' : '현재 오름차순 (내림차순으로 변경)',
+              tooltip: descending
+                  ? '현재 내림차순 (오름차순으로 변경)'
+                  : '현재 오름차순 (내림차순으로 변경)',
               onPressed: () {
-                ref.read(staffInventoryStatusDescendingProvider.notifier).toggle();
+                ref
+                    .read(staffInventoryStatusDescendingProvider.notifier)
+                    .toggle();
                 ref.read(staffStatusPageProvider.notifier).reset();
               },
               icon: Icon(descending ? Icons.south : Icons.north),
@@ -74,7 +103,8 @@ class StaffInventoryView extends ConsumerWidget {
           Padding(
             padding: EdgeInsets.only(right: isTablet ? 32 : 12),
             child: TextButton.icon(
-              onPressed: () => ref.read(staffInventoryDisplayProvider.notifier).toggle(),
+              onPressed: () =>
+                  ref.read(staffInventoryDisplayProvider.notifier).toggle(),
               icon: const Icon(Icons.swap_horiz),
               label: Text(statusMode ? '화장품별' : '상태별'),
             ),
@@ -88,10 +118,15 @@ class StaffInventoryView extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: _maxContentWidth),
               child: Padding(
-                padding: EdgeInsets.fromLTRB(isTablet ? 32 : 12, 10, isTablet ? 32 : 12, 6),
+                padding: EdgeInsets.fromLTRB(
+                  isTablet ? 32 : 12,
+                  10,
+                  isTablet ? 32 : 12,
+                  6,
+                ),
                 child: DropdownButtonFormField<InventoryDisplayFilter>(
                   key: ValueKey('inventory-filter-${selectedFilter.name}'),
-                  value: selectedFilter,
+                  initialValue: selectedFilter,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: '재고 상태 필터',
@@ -99,12 +134,19 @@ class StaffInventoryView extends ConsumerWidget {
                     prefixIcon: Icon(Icons.filter_list),
                     isDense: true,
                   ),
-                  items: InventoryDisplayFilter.values.map((filter) =>
-                    DropdownMenuItem(value: filter, child: Text(filter.label)),
-                  ).toList(),
+                  items: InventoryDisplayFilter.values
+                      .map(
+                        (filter) => DropdownMenuItem(
+                          value: filter,
+                          child: Text(filter.label),
+                        ),
+                      )
+                      .toList(),
                   onChanged: (value) {
                     if (value == null || value == selectedFilter) return;
-                    ref.read(staffInventoryFilterProvider.notifier).setFilter(value);
+                    ref
+                        .read(staffInventoryFilterProvider.notifier)
+                        .setFilter(value);
                     ref.read(staffCosmeticsPageProvider.notifier).reset();
                     ref.read(staffStatusPageProvider.notifier).reset();
                     ref.read(inventoryExpansionProvider.notifier).clear();
@@ -141,17 +183,25 @@ class _CosmeticsInventoryPage extends ConsumerWidget {
       ),
       data: (cosmetics) {
         if (cosmetics.isEmpty && page == 1) {
-          return Center(child: Text(filter == InventoryDisplayFilter.all
-              ? '보유중인 화장품이 없습니다' : '해당 상태의 재고가 있는 화장품이 없습니다')); 
+          return Center(
+            child: Text(
+              filter == InventoryDisplayFilter.all
+                  ? '보유중인 화장품이 없습니다'
+                  : '해당 상태의 재고가 있는 화장품이 없습니다',
+            ),
+          );
         }
         return LayoutBuilder(
           builder: (context, constraints) {
-            final tablet = constraints.maxWidth >= StaffInventoryView._tabletBreakpoint;
+            final tablet =
+                constraints.maxWidth >= StaffInventoryView._tabletBreakpoint;
             final horizontal = tablet ? 32.0 : 12.0;
             final vertical = tablet ? 24.0 : 12.0;
             return Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: StaffInventoryView._maxContentWidth),
+                constraints: const BoxConstraints(
+                  maxWidth: StaffInventoryView._maxContentWidth,
+                ),
                 child: Scrollbar(
                   child: ListView.separated(
                     key: ValueKey('cosmetics-page-$page-${filter.name}'),
@@ -162,17 +212,23 @@ class _CosmeticsInventoryPage extends ConsumerWidget {
                       vertical + MediaQuery.paddingOf(context).bottom,
                     ),
                     itemCount: cosmetics.length + 2,
-                    separatorBuilder: (_, index) => SizedBox(height: tablet ? 12 : 8),
+                    separatorBuilder: (_, index) =>
+                        SizedBox(height: tablet ? 12 : 8),
                     itemBuilder: (context, index) {
                       if (index == 0) {
-                        return _ListHeader(total: cosmetics.length, isTablet: tablet);
+                        return _ListHeader(
+                          total: cosmetics.length,
+                          isTablet: tablet,
+                        );
                       }
                       if (index == cosmetics.length + 1) {
                         return _InventoryPager(
                           page: page,
                           totalPages: null,
                           canNext: cosmetics.length == inventoryPageSize,
-                          onPage: (next) => ref.read(staffCosmeticsPageProvider.notifier).goTo(next),
+                          onPage: (next) => ref
+                              .read(staffCosmeticsPageProvider.notifier)
+                              .goTo(next),
                         );
                       }
                       return _CosmeticRow(
@@ -253,7 +309,8 @@ class _CosmeticRow extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
-            onTap: () => ref.read(inventoryExpansionProvider.notifier).toggle(key),
+            onTap: () =>
+                ref.read(inventoryExpansionProvider.notifier).toggle(key),
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: isTablet ? 22 : 14,
@@ -262,11 +319,15 @@ class _CosmeticRow extends ConsumerWidget {
               child: Row(
                 children: [
                   Icon(
-                    expanded ? Icons.folder_open_outlined : Icons.folder_outlined,
+                    expanded
+                        ? Icons.folder_open_outlined
+                        : Icons.folder_outlined,
                     size: isTablet ? 29 : 25,
                     color: theme.colorScheme.primary,
                   ),
                   SizedBox(width: isTablet ? 18 : 12),
+                  CosmeticImage(cosmeticIds: cosmetic.cosmeticIds),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: isTablet
                         ? Row(
@@ -389,7 +450,11 @@ class _OptionsBody extends ConsumerWidget {
                     ),
                   for (var i = 0; i < options.length; i++) ...[
                     if (i > 0) SizedBox(height: isTablet ? 10 : 6),
-                    _OptionRow(option: options[i], cosmeticName: cosmeticName, isTablet: isTablet),
+                    _OptionRow(
+                      option: options[i],
+                      cosmeticName: cosmeticName,
+                      isTablet: isTablet,
+                    ),
                   ],
                 ],
               ),
@@ -399,7 +464,11 @@ class _OptionsBody extends ConsumerWidget {
 }
 
 class _OptionRow extends ConsumerWidget {
-  const _OptionRow({required this.option, required this.cosmeticName, required this.isTablet});
+  const _OptionRow({
+    required this.option,
+    required this.cosmeticName,
+    required this.isTablet,
+  });
 
   final OptionCosmetics option;
   final String cosmeticName;
@@ -426,7 +495,8 @@ class _OptionRow extends ConsumerWidget {
       child: Column(
         children: [
           InkWell(
-            onTap: () => ref.read(inventoryExpansionProvider.notifier).toggle(key),
+            onTap: () =>
+                ref.read(inventoryExpansionProvider.notifier).toggle(key),
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: isTablet ? 18 : 12,
@@ -440,28 +510,43 @@ class _OptionRow extends ConsumerWidget {
                     color: theme.colorScheme.secondary,
                   ),
                   SizedBox(width: isTablet ? 14 : 10),
+                  CosmeticImage(cosmeticIds: [option.cosmeticId], size: 48),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: isTablet
                         ? Row(
                             children: [
                               Expanded(
                                 flex: 4,
-                                child: _OptionTitle(title: title, id: option.cosmeticId),
+                                child: _OptionTitle(
+                                  title: title,
+                                  id: option.cosmeticId,
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 flex: 2,
-                                child: _InfoCell(label: '판매가', value: '${_formatNumber(option.salePrice)}원'),
+                                child: _InfoCell(
+                                  label: '판매가',
+                                  value: '${_formatMoney(option.salePrice)}원',
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 flex: 2,
-                                child: _InfoCell(label: '최소 재고', value: '${_formatNumber(option.minStock)}개'),
+                                child: _InfoCell(
+                                  label: '최소 재고',
+                                  value: '${_formatNumber(option.minStock)}개',
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 flex: 2,
-                                child: _InfoCell(label: '목표 재고', value: '${_formatNumber(option.targetStock)}개'),
+                                child: _InfoCell(
+                                  label: '목표 재고',
+                                  value:
+                                      '${_formatNumber(option.targetStock)}개',
+                                ),
                               ),
                             ],
                           )
@@ -471,7 +556,7 @@ class _OptionRow extends ConsumerWidget {
                               _OptionTitle(title: title, id: option.cosmeticId),
                               const SizedBox(height: 8),
                               Text(
-                                '${_formatNumber(option.salePrice)}원 · 최소 ${option.minStock} / 목표 ${option.targetStock}',
+                                '${_formatMoney(option.salePrice)}원 · 최소 ${option.minStock} / 목표 ${option.targetStock}',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -480,6 +565,17 @@ class _OptionRow extends ConsumerWidget {
                           ),
                   ),
                   SizedBox(width: isTablet ? 12 : 6),
+                  IconButton(
+                    tooltip: '옵션 상세',
+                    icon: const Icon(Icons.info_outline),
+                    onPressed: () => Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => CosmeticOptionDetailView(
+                          cosmeticId: option.cosmeticId,
+                        ),
+                      ),
+                    ),
+                  ),
                   Icon(expanded ? Icons.expand_less : Icons.expand_more),
                 ],
               ),
@@ -487,7 +583,11 @@ class _OptionRow extends ConsumerWidget {
           ),
           if (expanded) ...[
             Divider(height: 1, color: theme.colorScheme.outlineVariant),
-            _InventoryBody(cosmeticId: option.cosmeticId, cosmeticName: cosmeticName, isTablet: isTablet),
+            _InventoryBody(
+              cosmeticId: option.cosmeticId,
+              cosmeticName: cosmeticName,
+              isTablet: isTablet,
+            ),
           ],
         ],
       ),
@@ -509,7 +609,9 @@ class _OptionTitle extends StatelessWidget {
       children: [
         Text(
           title,
-          style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.bodyLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
         if (title != id) ...[
           const SizedBox(height: 3),
@@ -528,7 +630,11 @@ class _OptionTitle extends StatelessWidget {
 }
 
 class _InventoryBody extends ConsumerWidget {
-  const _InventoryBody({required this.cosmeticId, required this.cosmeticName, required this.isTablet});
+  const _InventoryBody({
+    required this.cosmeticId,
+    required this.cosmeticName,
+    required this.isTablet,
+  });
 
   final String cosmeticId;
   final String cosmeticName;
@@ -577,11 +683,19 @@ class _InventoryBody extends ConsumerWidget {
                       isTablet: isTablet,
                       onTap: () async {
                         final batch = inventory[i];
-                        final discard = batch.inventoryStatus == InventoryStatus.DISCARD &&
+                        final discard =
+                            batch.inventoryStatus == InventoryStatus.DISCARD &&
                             batch.stockQuantity > 0;
                         final changed = discard
-                            ? await _openInventoryDiscard(context, batch, cosmeticName)
-                            : await _openInventoryHistory(context, batch.inventoryId);
+                            ? await _openInventoryDiscard(
+                                context,
+                                batch,
+                                cosmeticName,
+                              )
+                            : await _openInventoryHistory(
+                                context,
+                                batch.inventoryId,
+                              );
                         if (changed == true && context.mounted) {
                           invalidateStaffInventoryLists(ref);
                           ref.read(staffCosmeticsPageProvider.notifier).reset();
@@ -589,7 +703,10 @@ class _InventoryBody extends ConsumerWidget {
                         }
                       },
                       onHistoryTap: () async {
-                        final changed = await _openInventoryHistory(context, inventory[i].inventoryId);
+                        final changed = await _openInventoryHistory(
+                          context,
+                          inventory[i].inventoryId,
+                        );
                         if (changed == true && context.mounted) {
                           invalidateStaffInventoryLists(ref);
                           ref.read(staffCosmeticsPageProvider.notifier).reset();
@@ -606,7 +723,12 @@ class _InventoryBody extends ConsumerWidget {
 }
 
 class _InventoryRow extends StatelessWidget {
-  const _InventoryRow({required this.batch, required this.isTablet, this.onTap, this.onHistoryTap});
+  const _InventoryRow({
+    required this.batch,
+    required this.isTablet,
+    this.onTap,
+    this.onHistoryTap,
+  });
 
   final StaffProductInventory batch;
   final bool isTablet;
@@ -627,33 +749,40 @@ class _InventoryRow extends StatelessWidget {
       return InkWell(
         onTap: onTap,
         child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.layers_outlined, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('$id · $quantity', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 5),
-                  Text(
-                    '${InventoryDisplayFilter.forBatch(batch).label} / ${batch.saleOption.name}\n'
-                    '입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.layers_outlined, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$id · $quantity',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '${InventoryDisplayFilter.forBatch(batch).label} / ${batch.saleOption.name}\n'
+                      '입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: '입고/출고 내역 확인',
-              onPressed: onHistoryTap,
-              icon: const Icon(Icons.receipt_long_outlined),
-            ),
-          ],
-        ),
+              IconButton(
+                tooltip: '입고/출고 내역 확인',
+                onPressed: onHistoryTap,
+                icon: const Icon(Icons.receipt_long_outlined),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -661,28 +790,51 @@ class _InventoryRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-      child: Row(
-        children: [
-          Icon(Icons.layers_outlined, size: 22, color: theme.colorScheme.secondary),
-          const SizedBox(width: 12),
-          Expanded(flex: 4, child: _InfoCell(label: '재고 번호', value: id)),
-          const SizedBox(width: 12),
-          Expanded(flex: 2, child: _InfoCell(label: '수량', value: quantity)),
-          const SizedBox(width: 12),
-          Expanded(flex: 3, child: _InfoCell(label: '상태', value: '${InventoryDisplayFilter.forBatch(batch).label} / ${batch.saleOption.name}')),
-          const SizedBox(width: 12),
-          Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
-          const SizedBox(width: 12),
-          Expanded(flex: 3, child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn))),
-          IconButton(
-            tooltip: '입고/출고 내역 확인',
-            onPressed: onHistoryTap,
-            icon: const Icon(Icons.receipt_long_outlined),
-          ),
-          if (onTap != null) const Icon(Icons.chevron_right),
-        ],
-      ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        child: Row(
+          children: [
+            Icon(
+              Icons.layers_outlined,
+              size: 22,
+              color: theme.colorScheme.secondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 4,
+              child: _InfoCell(label: '재고 번호', value: id),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: _InfoCell(label: '수량', value: quantity),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: _InfoCell(
+                label: '상태',
+                value:
+                    '${InventoryDisplayFilter.forBatch(batch).label} / ${batch.saleOption.name}',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: _InfoCell(label: '입고일', value: _date(batch.receivedOn)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn)),
+            ),
+            IconButton(
+              tooltip: '입고/출고 내역 확인',
+              onPressed: onHistoryTap,
+              icon: const Icon(Icons.receipt_long_outlined),
+            ),
+            if (onTap != null) const Icon(Icons.chevron_right),
+          ],
+        ),
       ),
     );
   }
@@ -709,7 +861,8 @@ class _StatusInventoryPage extends ConsumerWidget {
       ),
       data: (overview) => LayoutBuilder(
         builder: (context, constraints) {
-          final tablet = constraints.maxWidth >= StaffInventoryView._tabletBreakpoint;
+          final tablet =
+              constraints.maxWidth >= StaffInventoryView._tabletBreakpoint;
           final statuses = <InventoryDisplayFilter>[
             InventoryDisplayFilter.discard,
             InventoryDisplayFilter.hold,
@@ -721,9 +874,11 @@ class _StatusInventoryPage extends ConsumerWidget {
               : <InventoryDisplayFilter>[filter];
 
           // API 측 정렬과 무관하게 상태 그룹 순서를 명확히 보장합니다.
-          final byStatus = <InventoryDisplayFilter, List<StaffProductInventory>>{
-            for (final status in orderedStatuses) status: <StaffProductInventory>[],
-          };
+          final byStatus =
+              <InventoryDisplayFilter, List<StaffProductInventory>>{
+                for (final status in orderedStatuses)
+                  status: <StaffProductInventory>[],
+              };
           for (final item in overview.inventories) {
             byStatus[InventoryDisplayFilter.forBatch(item)]?.add(item);
           }
@@ -745,15 +900,21 @@ class _StatusInventoryPage extends ConsumerWidget {
 
           return Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: StaffInventoryView._maxContentWidth),
+              constraints: const BoxConstraints(
+                maxWidth: StaffInventoryView._maxContentWidth,
+              ),
               child: Scrollbar(
                 child: RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(inventoryStatusOverviewProvider(lookup));
-                    await ref.read(inventoryStatusOverviewProvider(lookup).future);
+                    await ref.read(
+                      inventoryStatusOverviewProvider(lookup).future,
+                    );
                   },
                   child: ListView.builder(
-                    key: ValueKey('status-page-$page-$descending-${filter.name}'),
+                    key: ValueKey(
+                      'status-page-$page-$descending-${filter.name}',
+                    ),
                     padding: EdgeInsets.fromLTRB(
                       tablet ? 32 : 12,
                       tablet ? 24 : 12,
@@ -769,7 +930,9 @@ class _StatusInventoryPage extends ConsumerWidget {
                           totalPages: overview.totalPages,
                           total: overview.total,
                           canNext: overview.page < overview.totalPages,
-                          onPage: (next) => ref.read(staffStatusPageProvider.notifier).goTo(next),
+                          onPage: (next) => ref
+                              .read(staffStatusPageProvider.notifier)
+                              .goTo(next),
                         );
                       }
                       if (entry == null) {
@@ -797,30 +960,49 @@ class _StatusInventoryPage extends ConsumerWidget {
                         padding: EdgeInsets.only(bottom: tablet ? 10 : 8),
                         child: _StatusInventoryCard(
                           batch: batch,
-                          cosmeticName: overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
+                          cosmeticName:
+                              overview.cosmeticNames[batch.cosmeticId] ??
+                              batch.cosmeticId,
                           isTablet: tablet,
                           onTap: () async {
-                            final discard = batch.inventoryStatus == InventoryStatus.DISCARD &&
+                            final discard =
+                                batch.inventoryStatus ==
+                                    InventoryStatus.DISCARD &&
                                 batch.stockQuantity > 0;
                             final changed = discard
                                 ? await _openInventoryDiscard(
                                     context,
                                     batch,
-                                    overview.cosmeticNames[batch.cosmeticId] ?? batch.cosmeticId,
+                                    overview.cosmeticNames[batch.cosmeticId] ??
+                                        batch.cosmeticId,
                                   )
-                                : await _openInventoryHistory(context, batch.inventoryId);
+                                : await _openInventoryHistory(
+                                    context,
+                                    batch.inventoryId,
+                                  );
                             if (changed == true && context.mounted) {
                               invalidateStaffInventoryLists(ref);
-                              ref.read(staffCosmeticsPageProvider.notifier).reset();
-                              ref.read(staffStatusPageProvider.notifier).reset();
+                              ref
+                                  .read(staffCosmeticsPageProvider.notifier)
+                                  .reset();
+                              ref
+                                  .read(staffStatusPageProvider.notifier)
+                                  .reset();
                             }
                           },
                           onHistoryTap: () async {
-                            final changed = await _openInventoryHistory(context, batch.inventoryId);
+                            final changed = await _openInventoryHistory(
+                              context,
+                              batch.inventoryId,
+                            );
                             if (changed == true && context.mounted) {
                               invalidateStaffInventoryLists(ref);
-                              ref.read(staffCosmeticsPageProvider.notifier).reset();
-                              ref.read(staffStatusPageProvider.notifier).reset();
+                              ref
+                                  .read(staffCosmeticsPageProvider.notifier)
+                                  .reset();
+                              ref
+                                  .read(staffStatusPageProvider.notifier)
+                                  .reset();
                             }
                           },
                         ),
@@ -881,12 +1063,17 @@ class _StatusOverviewHeader extends StatelessWidget {
             spacing: 10,
             runSpacing: 6,
             children: [
-              Text('재고 상태별 목록', style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: isTablet ? 22 : 18,
-              )),
               Text(
-                descending ? '정렬: 폐기 대상 → 보류 → 유지 → 폐기 완료' : '정렬: 폐기 완료 → 유지 → 보류 → 폐기 대상',
+                '재고 상태별 목록',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: isTablet ? 22 : 18,
+                ),
+              ),
+              Text(
+                descending
+                    ? '정렬: 폐기 대상 → 보류 → 유지 → 폐기 완료'
+                    : '정렬: 폐기 완료 → 유지 → 보류 → 폐기 대상',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -896,7 +1083,11 @@ class _StatusOverviewHeader extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Icon(Icons.report_problem_outlined, size: 19, color: theme.colorScheme.error),
+              Icon(
+                Icons.report_problem_outlined,
+                size: 19,
+                color: theme.colorScheme.error,
+              ),
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
@@ -937,7 +1128,10 @@ class _StatusGroupHeader extends StatelessWidget {
           Container(
             width: 5,
             height: isTablet ? 34 : 30,
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(4),
+            ),
           ),
           const SizedBox(width: 11),
           Expanded(
@@ -1003,77 +1197,122 @@ class _StatusInventoryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
         onTap: onTap,
         child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 20 : 14,
-          vertical: isTablet ? 15 : 12,
-        ),
-        child: isTablet
-            ? Row(
-                children: [
-                  Icon(Icons.inventory_2_outlined, color: color, size: 24),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    flex: 5,
-                    child: _InfoCell(
-                      label: '화장품 이름',
-                      value: cosmeticName,
-                      secondary: '옵션 ID: ${batch.cosmeticId}',
+          padding: EdgeInsets.symmetric(
+            horizontal: isTablet ? 20 : 14,
+            vertical: isTablet ? 15 : 12,
+          ),
+          child: isTablet
+              ? Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined, color: color, size: 24),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      flex: 5,
+                      child: _InfoCell(
+                        label: '화장품 이름',
+                        value: cosmeticName,
+                        secondary: '옵션 ID: ${batch.cosmeticId}',
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 4, child: _InfoCell(label: '재고 번호', value: batch.inventoryId)),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 2, child: _InfoCell(label: '수량', value: '${_formatNumber(batch.stockQuantity)}개')),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 3, child: _InfoCell(label: '판매 상태', value: batch.saleOption.name)),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 3, child: _InfoCell(label: '유통기한', value: _date(batch.expiresOn))),
-                  IconButton(
-                    tooltip: '입고/출고 내역 확인',
-                    onPressed: onHistoryTap,
-                    icon: const Icon(Icons.receipt_long_outlined),
-                  ),
-                  if (onTap != null) ...[
-                    const SizedBox(width: 8),
-                    const Icon(Icons.chevron_right),
-                  ],
-                ],
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(cosmeticName,
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text('옵션 ID: ${batch.cosmeticId}',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 4),
-                  Text('재고 ${batch.inventoryId} · ${_formatNumber(batch.stockQuantity)}개 · ${InventoryDisplayFilter.forBatch(batch).label}',
-                      style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 4),
-                  if (onTap != null)
-                    Text(batch.inventoryStatus == InventoryStatus.DISCARD && batch.stockQuantity > 0
-                        ? '탭하여 폐기 · 오른쪽 아이콘으로 입출고 내역'
-                        : '탭하여 상세 조회',
-                      style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary)),
-                  Text(
-                    '${batch.saleOption.name} · 입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 4,
+                      child: _InfoCell(
+                        label: '재고 번호',
+                        value: batch.inventoryId,
+                      ),
                     ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: _InfoCell(
+                        label: '수량',
+                        value: '${_formatNumber(batch.stockQuantity)}개',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 3,
+                      child: _InfoCell(
+                        label: '판매 옵션',
+                        value: batch.saleOption.name,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 3,
+                      child: _InfoCell(
+                        label: '입고일',
+                        value: _date(batch.receivedOn),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 3,
+                      child: _InfoCell(
+                        label: '유통기한',
+                        value: _date(batch.expiresOn),
+                      ),
+                    ),
+                    IconButton(
                       tooltip: '입고/출고 내역 확인',
                       onPressed: onHistoryTap,
                       icon: const Icon(Icons.receipt_long_outlined),
                     ),
-                  ),
-                ],
-              ),
+                    if (onTap != null) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cosmeticName,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '옵션 ID: ${batch.cosmeticId}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '재고 ${batch.inventoryId} · ${_formatNumber(batch.stockQuantity)}개 · ${InventoryDisplayFilter.forBatch(batch).label}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    if (onTap != null)
+                      Text(
+                        batch.inventoryStatus == InventoryStatus.DISCARD &&
+                                batch.stockQuantity > 0
+                            ? '탭하여 폐기 · 오른쪽 아이콘으로 입출고 내역'
+                            : '탭하여 상세 조회',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    Text(
+                      '${batch.saleOption.name} · 입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        tooltip: '입고/출고 내역 확인',
+                        onPressed: onHistoryTap,
+                        icon: const Icon(Icons.receipt_long_outlined),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -1143,12 +1382,27 @@ class _InfoCell extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: 4),
-        Text(value, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         if (secondary != null) ...[
           const SizedBox(height: 3),
-          Text(secondary!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(
+            secondary!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ],
     );
@@ -1161,6 +1415,10 @@ String _formatNumber(int number) {
   return '$sign${digits.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',')}';
 }
 
+String _formatMoney(num amount) => amount
+    .toStringAsFixed(2)
+    .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',');
+
 class _LoadingRow extends StatelessWidget {
   const _LoadingRow();
 
@@ -1169,7 +1427,11 @@ class _LoadingRow extends StatelessWidget {
     padding: EdgeInsets.all(16),
     child: Row(
       children: [
-        SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+        SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
         SizedBox(width: 12),
         Text('조회 중...'),
       ],

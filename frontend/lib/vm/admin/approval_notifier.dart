@@ -53,6 +53,9 @@ class ApprovalNotifier extends Notifier<ApprovalState> {
     required String approvalId,
     required String employeeId,
     required String decisionStatus,
+    String? manufacturerId,
+    int? orderQuantity,
+    String? unitSupplyPrice,
   }) async {
     if (state.isProcessing) {
       return false;
@@ -92,15 +95,15 @@ class ApprovalNotifier extends Notifier<ApprovalState> {
         employeeId: employeeId,
         decisionStatus: decisionStatus,
         accessToken: accessToken,
+        manufacturerId: manufacturerId,
+        orderQuantity: orderQuantity,
+        unitSupplyPrice: unitSupplyPrice,
       );
 
       // 승인·반려 후 최신 품의 목록 다시 조회
       await getApprovalList();
 
-      if (state.errorMessage != null) {
-        return false;
-      }
-
+      // 결재 요청이 커밋된 뒤 목록 갱신이 실패해도 작업 자체는 성공이다.
       return true;
     } catch (e) {
       state = state.copyWith(

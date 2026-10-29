@@ -7,6 +7,9 @@ import '../../vm/auth/auth_notifier.dart';
 import '../auth/login_page.dart';
 
 import 'purchase_order_page.dart';
+import 'approval_order_dialog.dart';
+import 'management_list_controls.dart';
+import '../../vm/admin/purchase_order_notifier.dart';
 import 'staff_purchase_order_page.dart';
 import 'outbound_page.dart';
 import 'delivery_page.dart';
@@ -21,6 +24,24 @@ class ApprovalPage extends ConsumerStatefulWidget {
 }
 
 class _ApprovalPageState extends ConsumerState<ApprovalPage> {
+  ManagementListMode _mode = ManagementListMode.grouped;
+  String _status = 'ALL';
+  static const _statuses = {
+    'ALL': '전체 상태',
+    'REQUESTED': '승인 대기',
+    'APPROVED': '승인',
+    'REJECTED': '반려',
+    'CANCELLED': '취소',
+  };
+
+  String _approvalStatus(Approval approval) {
+    final status = approval.approvalStatus ?? approval.decisionStatus;
+    return status == 'PENDING' ? 'REQUESTED' : status ?? '';
+  }
+
+  bool _matches(Approval approval) =>
+      _status == 'ALL' || _approvalStatus(approval) == _status;
+
   @override
   void initState() {
     super.initState();
@@ -146,7 +167,7 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
 
               // 품의 목록
               Expanded(
-                flex: 2,
+                flex: compact ? 1 : 2,
                 child: Column(
                   children: [
                     Padding(
@@ -174,6 +195,14 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
                         ],
                       ),
                     ),
+                    ManagementListControls(
+                      mode: _mode,
+                      status: _status,
+                      statuses: _statuses,
+                      onModeChanged: (value) => setState(() => _mode = value),
+                      onStatusChanged: (value) =>
+                          setState(() => _status = value),
+                    ),
                     Expanded(child: _buildApprovalList()),
                   ],
                 ),
@@ -185,7 +214,7 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
                 const VerticalDivider(width: 1),
 
               // 품의 상세
-              Expanded(flex: 3, child: _buildApprovalDetail()),
+              Expanded(flex: compact ? 1 : 3, child: _buildApprovalDetail()),
             ],
           );
         },
@@ -209,28 +238,57 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
       return const Center(child: Text('품의 요청이 없습니다.'));
     }
 
+    final visible = approvalState.approvals.where(_matches).toList();
+    if (visible.isEmpty) return const Center(child: Text('선택한 상태의 품의가 없습니다.'));
+    if (_mode == ManagementListMode.individual) {
+      return ListView.builder(
+        itemCount: visible.length,
+        itemBuilder: (context, index) =>
+            _approvalTile(visible[index], individual: true),
+      );
+    }
+    final groups = <String, List<Approval>>{};
+    for (final approval in visible) {
+      final key =
+          '${approval.manufacturerId}:${approval.categoryId}:${approval.cosmeticNameSeq ?? approval.cosmeticId}';
+      groups.putIfAbsent(key, () => []).add(approval);
+    }
+    final grouped = groups.values.toList();
     return ListView.builder(
-      itemCount: approvalState.approvals.length,
+      itemCount: grouped.length,
       itemBuilder: (context, index) {
-        final approval = approvalState.approvals[index];
-
-        final isSelected =
-            approvalState.selectedApproval?.approvalId == approval.approvalId;
-
-        return ListTile(
-          selected: isSelected,
-          title: Text(approval.cosmeticName),
-          subtitle: Text('요청 수량: ${approval.requestedQuantity}개'),
-          trailing: Text(
-            approval.decisionStatus ?? approval.approvalStatus ?? '대기',
-          ),
-          onTap: () {
-            ref.read(approvalProvider.notifier).selectApproval(approval);
-          },
+        final approvals = grouped[index];
+        return ExpansionTile(
+          title: Text(approvals.first.cosmeticName),
+          subtitle: Text(approvals.first.manufacturerName ?? ''),
+          children: [for (final approval in approvals) _approvalTile(approval)],
         );
       },
     );
   }
+
+  Widget _approvalTile(
+    Approval approval, {
+    bool individual = false,
+  }) => ListTile(
+    key: ValueKey(approval.approvalId),
+    selected:
+        ref.watch(approvalProvider).selectedApproval?.approvalId ==
+        approval.approvalId,
+    title: Text(
+      individual
+          ? '${approval.cosmeticName} · ${approval.volumeText ?? approval.cosmeticId}'
+          : approval.volumeText ?? approval.cosmeticId,
+    ),
+    subtitle: Text(
+      '품의 ${approval.approvalSeq}차 · 요청 ${approval.requestedQuantity}개\n${approval.approvalId}',
+    ),
+    isThreeLine: true,
+    trailing: Text(
+      _statuses[_approvalStatus(approval)] ?? _approvalStatus(approval),
+    ),
+    onTap: () => ref.read(approvalProvider.notifier).selectApproval(approval),
+  );
 
   // 품의 상세
   Widget _buildApprovalDetail() {
@@ -239,7 +297,7 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
 
     final approval = approvalState.selectedApproval;
 
-    if (approval == null) {
+    if (approval == null || !_matches(approval)) {
       return const Center(child: Text('품의 요청을 선택해주세요.'));
     }
 
@@ -250,7 +308,6 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
     final canDecide =
         authState.isAdmin &&
         loggedInEmployeeId != null &&
-        approval.employeeId == loggedInEmployeeId &&
         approval.approvalStatus == 'REQUESTED' &&
         approval.decisionStatus == 'PENDING' &&
         !approvalState.isProcessing;
@@ -270,12 +327,18 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
             _detailRow('품의 ID', approval.approvalId),
             _detailRow('상품 ID', approval.cosmeticId),
             _detailRow('상품명', approval.cosmeticName),
+            _detailRow('옵션', approval.volumeText ?? '-'),
+            _detailRow('발주처', approval.manufacturerName ?? '-'),
             _detailRow('품의 차수', '${approval.approvalSeq}'),
             _detailRow('목표 재고', '${approval.targetStockSnapshot}개'),
             _detailRow('현재 재고', '${approval.currentStockSnapshot}개'),
             _detailRow('요청 수량', '${approval.requestedQuantity}개'),
             _detailRow('요청일', approval.requestedOn.toString().split(' ')[0]),
             _detailRow('품의 내용', approval.approvalContent),
+            if (approval.purchaseOrderId != null) ...[
+              _detailRow('연결된 발주', approval.purchaseOrderId!),
+              _detailRow('발주 수량', '${approval.orderQuantity}개'),
+            ],
             _detailRow(
               '결재 상태',
               approval.decisionStatus ?? approval.approvalStatus ?? '대기',
@@ -289,9 +352,9 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: canDecide
-                        ? () => _decideApproval(approval, 'APPROVED')
+                        ? () => _approveAndOrder(approval)
                         : null,
-                    child: const Text('승인'),
+                    child: const Text('승인 및 발주'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -330,7 +393,21 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
     );
   }
 
-  Future<void> _decideApproval(Approval approval, String decisionStatus) async {
+  Future<void> _approveAndOrder(Approval approval) async {
+    final details = await showDialog<ApprovalOrderDetails>(
+      context: context,
+      builder: (_) => ApprovalOrderDialog(approval: approval),
+    );
+    if (details != null && mounted) {
+      await _decideApproval(approval, 'APPROVED', details);
+    }
+  }
+
+  Future<void> _decideApproval(
+    Approval approval,
+    String decisionStatus, [
+    ApprovalOrderDetails? details,
+  ]) async {
     final authState = ref.read(authProvider);
 
     final employeeId = authState.employee?.employeeId;
@@ -348,7 +425,14 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
           approvalId: approval.approvalId,
           employeeId: employeeId,
           decisionStatus: decisionStatus,
+          manufacturerId: details?.manufacturerId,
+          orderQuantity: details?.quantity,
+          unitSupplyPrice: details?.price,
         );
+
+    if (success && decisionStatus == 'APPROVED') {
+      ref.invalidate(purchaseOrderProvider);
+    }
 
     if (!mounted) return;
 
@@ -358,7 +442,9 @@ class _ApprovalPageState extends ConsumerState<ApprovalPage> {
       SnackBar(
         content: Text(
           success
-              ? '품의 처리가 완료되었습니다.'
+              ? (decisionStatus == 'APPROVED'
+                    ? '품의 승인과 발주가 완료되었습니다.'
+                    : '품의를 반려했습니다.')
               : approvalState.errorMessage ?? '품의 처리에 실패했습니다.',
         ),
       ),
