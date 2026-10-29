@@ -26,10 +26,10 @@ def create_inbound(data: InboundCreateRequest):
                     detail="존재하지 않는 직원입니다.",
                 )
 
-            if employee["employee_role"] != "STAFF":
+            if employee["employee_role"] not in ("STAFF", "ADMIN"):
                 raise HTTPException(
                     status_code=403,
-                    detail="본사 직원만 입고 처리할 수 있습니다.",
+                    detail="본사 직원 또는 관리자만 입고 처리할 수 있습니다.",
                 )
 
             # 2. 발주 조회 및 잠금

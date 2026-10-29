@@ -1,3 +1,5 @@
+from pwdlib.exceptions import UnknownHashError
+
 """직원용 API의 JWT 인증 및 현재 DB 권한 확인."""
 import logging
 import os
@@ -171,7 +173,7 @@ def authenticate_employee(login_id: str, password: str) -> dict:
         raise invalid
     try:
         verified = _password_hasher.verify(password, employee["password_hash"])
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, UnknownHashError):
         # 개발용 시드의 __DEMO_HASH... 등 유효하지 않은 해시 처리
         logger.warning("직원 계정에 유효하지 않은 비밀번호 해시가 저장되어 있습니다.")
         raise invalid from None
