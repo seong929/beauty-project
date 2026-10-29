@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../model/admin/purchase_order.dart';
 import '../../vm/admin/staff_purchase_order_notifier.dart';
 import 'inbound_page.dart';
-import '../../vm/auth/auth_notifier.dart';
 
 class StaffPurchaseOrderPage extends ConsumerStatefulWidget {
   const StaffPurchaseOrderPage({super.key});
@@ -113,14 +112,6 @@ class _StaffPurchaseOrderPageState
                         .getPurchaseOrderList();
                   },
             icon: const Icon(Icons.refresh),
-          ),
-          // 로그아웃
-          IconButton(
-            tooltip: '로그아웃',
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              ref.read(authProvider.notifier).logout();
-            },
           ),
         ],
       ),

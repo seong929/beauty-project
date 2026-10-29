@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../model/admin/purchase_order.dart';
 import '../../vm/admin/purchase_order_notifier.dart';
+import '../../vm/admin/purchase_order_state.dart';
+import 'management_list_controls.dart';
 
 class PurchaseOrderPage extends ConsumerStatefulWidget {
   const PurchaseOrderPage({super.key});
@@ -12,6 +14,20 @@ class PurchaseOrderPage extends ConsumerStatefulWidget {
 }
 
 class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
+  ManagementListMode _mode = ManagementListMode.grouped;
+  String _status = 'ALL';
+  static const _statuses = {
+    'ALL': '전체 상태',
+    'REQUESTED': '요청',
+    'ORDERED': '발주 완료',
+    'PARTIALLY_RECEIVED': '부분 입고',
+    'RECEIVED': '입고 완료',
+    'CANCELLED': '취소',
+  };
+
+  bool _matches(PurchaseOrder order) =>
+      _status == 'ALL' || order.purchaseStatus == _status;
+
   @override
   void initState() {
     super.initState();
@@ -21,128 +37,6 @@ class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
 
       ref.read(purchaseOrderProvider.notifier).getPurchaseOrderList();
     });
-  }
-
-  // 발주 등록 입력창
-  Future<void> _showCreateDialog() async {
-    final approvalController = TextEditingController();
-    final manufacturerController = TextEditingController();
-    final priceController = TextEditingController();
-
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) {
-          return Consumer(
-            builder: (context, ref, child) {
-              final orderState = ref.watch(purchaseOrderProvider);
-
-              return AlertDialog(
-                title: const Text('발주 등록'),
-                content: SizedBox(
-                  width: 420,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: approvalController,
-                          enabled: !orderState.isProcessing,
-                          decoration: const InputDecoration(
-                            labelText: '품의 ID',
-                            hintText: '승인된 품의 ID 입력',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: manufacturerController,
-                          enabled: !orderState.isProcessing,
-                          decoration: const InputDecoration(
-                            labelText: '제조사 ID',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: priceController,
-                          enabled: !orderState.isProcessing,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: '개당 공급 단가',
-                            suffixText: '원',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: orderState.isProcessing
-                        ? null
-                        : () => Navigator.pop(dialogContext),
-                    child: const Text('취소'),
-                  ),
-                  ElevatedButton(
-                    onPressed: orderState.isProcessing
-                        ? null
-                        : () async {
-                            final success = await ref
-                                .read(purchaseOrderProvider.notifier)
-                                .createPurchaseOrder(
-                                  approvalId: approvalController.text,
-                                  manufacturerId: manufacturerController.text,
-                                  unitSupplyPrice: priceController.text,
-                                );
-
-                            if (!dialogContext.mounted) return;
-
-                            if (success) {
-                              Navigator.pop(dialogContext);
-
-                              if (!mounted) return;
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('발주 등록이 완료되었습니다.'),
-                                ),
-                              );
-                            } else {
-                              final error = ref
-                                  .read(purchaseOrderProvider)
-                                  .errorMessage;
-
-                              ScaffoldMessenger.of(dialogContext).showSnackBar(
-                                SnackBar(
-                                  content: Text(error ?? '발주 등록에 실패했습니다.'),
-                                ),
-                              );
-                            }
-                          },
-                    child: orderState.isProcessing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('등록'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      // 다이얼로그 종료 후 입력 컨트롤러 정리
-      // 종료 애니메이션이 끝난 다음 dispose하도록
-      // 컨트롤러는 다이얼로그 내부 위젯에서 관리하는 것이
-      // 더 안전하므로 이 단계에서는 별도 dispose를 하지 않음.
-    }
   }
 
   @override
@@ -164,15 +58,6 @@ class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
                   },
             icon: const Icon(Icons.refresh),
           ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: ElevatedButton.icon(
-              onPressed: orderState.isProcessing ? null : _showCreateDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('발주 등록'),
-            ),
-          ),
         ],
       ),
       body: LayoutBuilder(
@@ -182,7 +67,23 @@ class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
             direction: compact ? Axis.vertical : Axis.horizontal,
             children: [
               // 왼쪽: 발주 목록
-              Expanded(flex: 4, child: _buildPurchaseOrderList(orderState)),
+              Expanded(
+                flex: 4,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    ManagementListControls(
+                      mode: _mode,
+                      status: _status,
+                      statuses: _statuses,
+                      onModeChanged: (value) => setState(() => _mode = value),
+                      onStatusChanged: (value) =>
+                          setState(() => _status = value),
+                    ),
+                    Expanded(child: _buildPurchaseOrderList(orderState)),
+                  ],
+                ),
+              ),
 
               if (compact)
                 const Divider(height: 1)
@@ -204,7 +105,7 @@ class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
   }
 
   // 발주 목록 영역
-  Widget _buildPurchaseOrderList(dynamic orderState) {
+  Widget _buildPurchaseOrderList(PurchaseOrderState orderState) {
     if (orderState.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -217,35 +118,58 @@ class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
       return const Center(child: Text('등록된 발주가 없습니다.'));
     }
 
+    final visible = orderState.purchaseOrders.where(_matches).toList();
+    if (visible.isEmpty) return const Center(child: Text('선택한 상태의 발주가 없습니다.'));
+    if (_mode == ManagementListMode.individual) {
+      return ListView.builder(
+        itemCount: visible.length,
+        itemBuilder: (context, index) =>
+            _orderTile(visible[index], individual: true),
+      );
+    }
+    final groups = <String, List<PurchaseOrder>>{};
+    for (final order in visible) {
+      final key =
+          '${order.manufacturerId}:${order.categoryId}:${order.cosmeticNameSeq ?? order.cosmeticId}';
+      groups.putIfAbsent(key, () => []).add(order);
+    }
+    final grouped = groups.values.toList();
     return ListView.builder(
-      itemCount: orderState.purchaseOrders.length,
+      itemCount: grouped.length,
       itemBuilder: (context, index) {
-        final PurchaseOrder order = orderState.purchaseOrders[index];
-
-        final selected =
-            orderState.selectedPurchaseOrder?.purchaseOrderId ==
-            order.purchaseOrderId;
-
-        return ListTile(
-          selected: selected,
-          title: Text(order.cosmeticName),
-          subtitle: Text(
-            '${order.manufacturerName}\n'
-            '발주 ID: ${order.purchaseOrderId}',
-          ),
-          isThreeLine: true,
-          trailing: Text(order.purchaseStatus),
-          onTap: () {
-            ref.read(purchaseOrderProvider.notifier).selectPurchaseOrder(order);
-          },
+        final orders = grouped[index];
+        return ExpansionTile(
+          title: Text(orders.first.cosmeticName),
+          subtitle: Text(orders.first.manufacturerName),
+          children: [for (final order in orders) _orderTile(order)],
         );
       },
     );
   }
 
+  Widget _orderTile(PurchaseOrder order, {bool individual = false}) => ListTile(
+    key: ValueKey(order.purchaseOrderId),
+    selected:
+        ref
+            .watch(purchaseOrderProvider)
+            .selectedPurchaseOrder
+            ?.purchaseOrderId ==
+        order.purchaseOrderId,
+    title: Text(
+      individual
+          ? '${order.cosmeticName} · ${order.volumeText ?? order.cosmeticId}'
+          : order.volumeText ?? order.cosmeticId,
+    ),
+    subtitle: Text('품의: ${order.approvalId}\n발주: ${order.purchaseOrderId}'),
+    isThreeLine: true,
+    trailing: Text(_statuses[order.purchaseStatus] ?? order.purchaseStatus),
+    onTap: () =>
+        ref.read(purchaseOrderProvider.notifier).selectPurchaseOrder(order),
+  );
+
   // 발주 상세 영역
   Widget _buildPurchaseOrderDetail(PurchaseOrder? order) {
-    if (order == null) {
+    if (order == null || !_matches(order)) {
       return const Center(child: Text('발주 내역을 선택해 주세요.'));
     }
 
@@ -261,6 +185,7 @@ class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
           _detailRow('품의 ID', order.approvalId),
           _detailRow('발주 차수', '${order.purchaseOrderSeq}차'),
           _detailRow('상품명', order.cosmeticName),
+          _detailRow('옵션', order.volumeText ?? '-'),
           _detailRow('상품 ID', order.cosmeticId),
           _detailRow('제조사', order.manufacturerName),
           _detailRow('제조사 ID', order.manufacturerId),

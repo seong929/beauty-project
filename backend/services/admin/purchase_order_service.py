@@ -175,6 +175,11 @@ def get_purchase_order_list():
                     m.manufacturer_name,
                     a.cosmetic_id,
                     c.cosmetic_name,
+                    c.category_id,
+                    c.cosmetic_name_seq,
+                    (SELECT v.volume_text FROM cosmetic_volume_history v
+                     WHERE v.cosmetic_id = c.cosmetic_id
+                     ORDER BY v.changed_on DESC, CAST(SUBSTRING(v.change_id, 5) AS UNSIGNED) DESC LIMIT 1) AS volume_text,
                     po.ordered_on,
                     po.order_quantity,
                     po.purchase_status,

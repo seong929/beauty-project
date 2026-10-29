@@ -1,24 +1,23 @@
 // ignore_for_file: constant_identifier_names
 
-enum SaleStatus{
-  ON_SALE,
-  DISCONTINUED
-}
+enum SaleStatus { ON_SALE, DISCONTINUED }
 
-class RootCosmetics{
+class RootCosmetics {
   String name;
   String categoryName;
+  List<String> cosmeticIds;
 
   RootCosmetics({
     required this.name,
-    required this.categoryName
+    required this.categoryName,
+    this.cosmeticIds = const [],
   });
 }
 
-class OptionCosmetics{
+class OptionCosmetics {
   String cosmeticId;
   String manufactureerId;
-  int salePrice, unitPrice;
+  num salePrice, unitPrice;
   int minStock, targetStock;
   String? volumeText, saleStatus;
 
@@ -30,6 +29,6 @@ class OptionCosmetics{
     required this.minStock,
     required this.targetStock,
     this.volumeText,
-    this.saleStatus
+    this.saleStatus,
   });
 }

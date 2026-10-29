@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -64,5 +65,72 @@ class ManagementService {
   Future<Map<String, dynamic>> createCosmetic(Map<String, dynamic> data) async {
     return await _request('POST', '/admin/cosmetics', data)
         as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getCarriers() async =>
+      (await _request('GET', '/staff/carriers') as List)
+          .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> getCategories() async =>
+      (await _request('GET', '/admin/categories') as List)
+          .cast<Map<String, dynamic>>();
+
+  Future<void> changeSaleStatus(String cosmeticId, String status) async {
+    await _request(
+      'PATCH',
+      '/admin/cosmetics/${Uri.encodeComponent(cosmeticId)}/sale-status',
+      {'sale_status': status},
+    );
+  }
+
+  Future<Map<String, dynamic>> getCosmeticDetails(String cosmeticId) async =>
+      await _request(
+            'GET',
+            '/staff/cosmetics/${Uri.encodeComponent(cosmeticId)}/detail',
+          )
+          as Map<String, dynamic>;
+
+  Future<void> updateCosmeticDetails(
+    String cosmeticId,
+    Map<String, dynamic> data,
+  ) async {
+    await _request(
+      'PATCH',
+      '/admin/cosmetics/${Uri.encodeComponent(cosmeticId)}',
+      data,
+    );
+  }
+
+  Future<String?> getCosmeticImage(String cosmeticId) async {
+    final result = await _request(
+      'GET',
+      '/staff/cosmetics/${Uri.encodeComponent(cosmeticId)}/image',
+    );
+    return (result as Map<String, dynamic>)['image_url'] as String?;
+  }
+
+  Future<void> uploadCosmeticImage(
+    String cosmeticId,
+    Uint8List bytes,
+    String filename,
+  ) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse(
+        '${ApiConfig.baseUrl}/admin/cosmetics/${Uri.encodeComponent(cosmeticId)}/image',
+      ),
+    );
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: filename),
+    );
+    final response = await http.Response.fromStream(await client.send(request));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String? detail;
+      try {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        detail = body['detail'] is String ? body['detail'] as String : null;
+      } catch (_) {}
+      throw Exception(detail ?? '이미지 업로드에 실패했습니다. (${response.statusCode})');
+    }
   }
 }

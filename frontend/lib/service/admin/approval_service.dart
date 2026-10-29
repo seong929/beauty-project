@@ -34,6 +34,9 @@ class ApprovalService {
     required String employeeId,
     required String decisionStatus,
     required String accessToken,
+    String? manufacturerId,
+    int? orderQuantity,
+    String? unitSupplyPrice,
   }) async {
     if (decisionStatus != 'APPROVED' && decisionStatus != 'REJECTED') {
       throw ArgumentError('decisionStatus는 APPROVED 또는 REJECTED여야 합니다.');
@@ -54,6 +57,9 @@ class ApprovalService {
       body: jsonEncode({
         'employee_id': employeeId,
         'decision_status': decisionStatus,
+        'manufacturer_id': ?manufacturerId,
+        'order_quantity': ?orderQuantity,
+        'unit_supply_price': ?unitSupplyPrice,
       }),
     );
 

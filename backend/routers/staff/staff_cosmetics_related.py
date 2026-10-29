@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path
 
 import services.staff.staff_cosmetics_service as staff_cosmetics_service
 from services.staff.staff_auth_service import require_staff
+from services.admin.cosmetic_details_service import get_cosmetic_details
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,11 @@ class InventoryFilterStatus(str, Enum):
     HOLD = "HOLD"
     DISCARD = "DISCARD"
     DISCARD_COMPLETED = "DISCARD_COMPLETED"
+
+
+@router.get('/cosmetics/{cosmetic_id}/detail', summary='상품 옵션 상세 조회')
+def read_cosmetic_details(cosmetic_id: str):
+    return get_cosmetic_details(cosmetic_id)
 
 
 # 옵션별 중복을 제거한 화장품 목록 조회

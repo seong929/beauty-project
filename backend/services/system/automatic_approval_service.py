@@ -186,7 +186,8 @@ def _process_cosmetic(cosmetic_id: str) -> dict:
                 SELECT sale_status
                 FROM cosmetic_sale_status_history
                 WHERE cosmetic_id = %s
-                ORDER BY changed_on DESC, change_id DESC
+                ORDER BY changed_on DESC,
+                         CAST(SUBSTRING(change_id, 5) AS UNSIGNED) DESC
                 LIMIT 1
                 """,
                 (cosmetic_id,)
@@ -411,8 +412,7 @@ def _process_cosmetic(cosmetic_id: str) -> dict:
 
 def create_automatic_approvals() -> dict:
     """
-    기존 품의에 등장한 화장품만 대상으로
-    재고 부족 여부를 확인하고 새 품의를 생성한다.
+    등록된 모든 화장품의 재고 부족 여부를 확인하고 새 품의를 생성한다.
 
     내부 자동화 프로그램은 이 함수를 직접 호출할 수 있다.
     """
@@ -422,8 +422,8 @@ def create_automatic_approvals() -> dict:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT DISTINCT cosmetic_id
-                    FROM approvals
+                    SELECT cosmetic_id
+                    FROM cosmetics
                     ORDER BY cosmetic_id
                     """
                 )

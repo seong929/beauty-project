@@ -1,3 +1,5 @@
+// ignore_for_file: unintended_html_in_doc_comment
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -26,10 +28,9 @@ class StaffInventoryService {
   StaffInventoryService({
     required String baseUrl,
     this.enableTemporaryAuth = false,
-    String? accessToken,
+    this._accessToken,
     http.Client? client,
   })  : baseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), ''),
-        _accessToken = accessToken,
         _client = client ?? createStaffInventoryHttpClient();
 
   final String baseUrl;
@@ -335,11 +336,12 @@ class StaffInventoryService {
     final rows = _rows(await _get('/staff/cosmetics/distinct', {
       'page': '$page',
       'count': '$count',
-      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
+      'inventory_status': ?inventoryStatus,
     }));
     return rows.map((json) => RootCosmetics(
       name: _requiredString(json, 'cosmetic_name'),
       categoryName: _requiredString(json, 'category_name'),
+      cosmeticIds: (json['cosmetic_ids'] as List?)?.map((id) => id.toString()).toList() ?? const [],
     )).toList();
   }
 
@@ -353,13 +355,13 @@ class StaffInventoryService {
   }) async {
     final encodedName = Uri.encodeComponent(cosmeticName);
     final rows = _rows(await _get('/staff/cosmetics/$encodedName/options', {
-      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
+      'inventory_status': ?inventoryStatus,
     }));
     return rows.map((json) => OptionCosmetics(
           cosmeticId: _requiredString(json, 'cosmetic_id'),
           manufactureerId: _requiredString(json, 'manufacturer_id'),
-          salePrice: _asInt(json['sale_price']),
-          unitPrice: _asInt(json['unit_cost']),
+          salePrice: num.tryParse(json['sale_price']?.toString() ?? '') ?? 0,
+          unitPrice: num.tryParse(json['unit_cost']?.toString() ?? '') ?? 0,
           minStock: _asInt(json['min_stock_qty']),
           targetStock: _asInt(json['target_stock_qty']),
           volumeText: json['volume_text']?.toString(),
@@ -373,7 +375,7 @@ class StaffInventoryService {
   }) async {
     final encodedId = Uri.encodeComponent(cosmeticId);
     final rows = _rows(await _get('/staff/cosmetics/$encodedId/inventory', {
-      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
+      'inventory_status': ?inventoryStatus,
     }));
     return rows.map(_inventoryFromJson).toList();
   }
@@ -407,7 +409,7 @@ class StaffInventoryService {
       'page': '$page',
       'count': '$count',
       'descending': '$descending',
-      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
+      'inventory_status': ?inventoryStatus,
     });
     if (response is! Map) {
       throw const StaffInventoryApiException('상태별 재고 API 응답이 객체 형식이 아닙니다.');
