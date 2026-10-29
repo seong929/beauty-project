@@ -2,7 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../service/delivery/delivery_service.dart';
-import '../auth/auth_notifier.dart';
+import '../auth/carrier_auth_notifier.dart';
 import 'delivery_state.dart';
 
 // 배송업체 API 서비스 Provider
@@ -21,18 +21,15 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
 
   // 로그인한 사용자의 Access Token 가져오기
   String _getAccessToken() {
-    final employee = ref.read(authProvider).employee;
+    final authState = ref.read(carrierAuthProvider);
+    final accessToken = authState.accessToken;
 
-    if (employee == null) {
-      throw Exception('로그인이 필요합니다.');
-    }
-
-    if (employee.accessToken.isEmpty) {
-      throw Exception('로그인 토큰이 없습니다.');
-    }
-
-    return employee.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+    throw Exception('배송업체 로그인이 필요합니다.');
   }
+
+  return accessToken;
+}
 
   // 배송 목록 조회
   Future<void> fetchDeliveryList() async {

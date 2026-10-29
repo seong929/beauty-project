@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../vm/auth/auth_notifier.dart';
 import '../admin/approval_page.dart';
 import '../admin/staff_purchase_order_page.dart';
+import 'carrier_login_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -92,6 +93,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('지원하지 않는 사용자 권한입니다.'),
+      ),
+    );
+  }
+
+  // 배송업체 로그인 화면으로 이동
+  void _goToCarrierLogin() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CarrierLoginPage(),
       ),
     );
   }
@@ -223,6 +234,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      const Divider(),
+
+                      const SizedBox(height: 8),
+
+                      // 배송업체 로그인 화면 이동
+                      SizedBox(
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: authState.isLoading
+                              ? null
+                              : _goToCarrierLogin,
+                          icon: const Icon(
+                            Icons.local_shipping_outlined,
+                          ),
+                          label: const Text(
+                            '배송업체 로그인',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                     ],

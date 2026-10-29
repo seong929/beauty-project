@@ -35,7 +35,45 @@ def get_delivery_list(carrier_id: str):
                     d.delivery_seq DESC
             """
 
-            cursor.execute(sql, (carrier_id))
+            cursor.execute(sql, (carrier_id,))
+            result = cursor.fetchall()
+
+        return result
+
+    finally:
+        conn.close()
+
+# 본사 관리자 전체 배송 목록 조회
+def get_admin_delivery_list():
+    conn = get_connection()
+
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                SELECT
+                    d.delivery_id,
+                    d.order_id,
+                    d.delivery_seq,
+                    c.carrier_name,
+                    o.shipping_address,
+                    o.ordered_at,
+                    d.delivery_status,
+                    d.shipped_at,
+                    d.arrived_at
+                FROM delivery_information AS d
+
+                JOIN carriers AS c
+                    ON d.carrier_id = c.carrier_id
+
+                JOIN orders AS o
+                    ON d.order_id = o.order_id
+
+                ORDER BY
+                    o.ordered_at DESC,
+                    d.delivery_seq DESC
+            """
+
+            cursor.execute(sql)
             result = cursor.fetchall()
 
         return result

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../model/delivery/delivery.dart';
 import '../../vm/delivery/delivery_notifier.dart';
 import '../../vm/delivery/delivery_state.dart';
+import '../../vm/auth/carrier_auth_notifier.dart';
+import '../auth/login_page.dart';
 
 class DeliveryPage extends ConsumerStatefulWidget {
   const DeliveryPage({super.key});
@@ -23,6 +25,23 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
 
       ref.read(deliveryProvider.notifier).fetchDeliveryList();
     });
+  }
+
+  // 배송업체 로그아웃
+  void _logout() {
+    // 배송 목록 및 선택 상태 초기화
+    ref.invalidate(deliveryProvider);
+
+    // 배송업체 JWT 및 로그인 정보 초기화
+    ref.read(carrierAuthProvider.notifier).logout();
+
+    // 로그인 화면으로 이동
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (context) => const LoginPage(),
+      ),
+      (route) => false,
+    );
   }
 
   String _formatDate(DateTime? date) {
@@ -79,6 +98,15 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('배송업체 배송 관리'),
+        // 뒤로 가기 버튼도 로그아웃으로 처리
+        leading: IconButton(
+          tooltip: '로그아웃',
+          icon: const Icon(Icons.logout),
+          onPressed: deliveryState.isLoading ||
+                  deliveryState.isProcessing
+              ? null
+              : _logout,
+        ),
         actions: [
           IconButton(
             tooltip: '새로고침',

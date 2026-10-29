@@ -18,9 +18,11 @@ from routers.customer.order import router as order_router
 from routers.customer.order_item import router as order_item_router
 from routers.customer.delivery import router as customer_delivery_router
 from routers.customer.review import router as review_router
-from routers.delivery.delivery import router as delivery_router
+from routers.delivery.delivery import router as carrier_delivery_router
 from routers.delivery.carrier_router import router as carrier_router
 from routers.delivery.delivery_auth_router import router as delivery_auth_router
+from routers.admin.delivery_router import router as admin_delivery_router
+from routers.staff.staff_delivery_router import router as staff_delivery_router
 
 
 app = FastAPI(
@@ -43,13 +45,15 @@ app.include_router(order_router)
 app.include_router(order_item_router)
 app.include_router(customer_delivery_router)
 app.include_router(review_router)
-app.include_router(delivery_router)
+app.include_router(carrier_delivery_router)
 app.include_router(delivery_auth_router)
 app.include_router(staff_order_router)
 app.include_router(staff_auth_router)
 app.include_router(staff_cosmetics_router)
 app.include_router(staff_inventory_router)
+app.include_router(staff_delivery_router)
 app.include_router(automatic_approval_router)
+app.include_router(admin_delivery_router)
 
 
 @app.get("/")

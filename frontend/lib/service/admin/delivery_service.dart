@@ -61,7 +61,7 @@ class DeliveryService {
     required String accessToken,
   }) async {
     final url = Uri.parse(
-      '$baseUrl/delivery/deliveries',
+      '$baseUrl/admin/deliveries',
     );
 
     final response = await http.get(
