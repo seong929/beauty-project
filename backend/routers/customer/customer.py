@@ -197,9 +197,19 @@ def customer_update(
                 customer_id,))
             
         conn.commit()
-        return {"result": "OK",
-                "message": "고객 정보가 수정되었습니다."
-                }
+        return {
+            "result": "OK",
+            "message": "고객 정보가 수정되었습니다."
+        }
+
+    except pymysql.err.IntegrityError:
+        if conn is not None:
+            conn.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="이미 사용 중인 이메일입니다."
+        )
+
     except Exception:
         if conn is not None:
             conn.rollback()
