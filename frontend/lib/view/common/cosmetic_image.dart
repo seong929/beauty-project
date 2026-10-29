@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../vm/admin/management_vm.dart';
 
-final cosmeticImageLoaderProvider = Provider<ImageProvider<Object> Function(String)>(
-  (ref) => (url) => NetworkImage(url),
-);
+final cosmeticImageLoaderProvider =
+    Provider<ImageProvider<Object> Function(String)>(
+      (ref) =>
+          (url) => NetworkImage(url),
+    );
 
 /// Uses option ordering and advances only when metadata or the actual image fails.
 class CosmeticImage extends ConsumerStatefulWidget {
@@ -20,10 +22,12 @@ class CosmeticImage extends ConsumerStatefulWidget {
 class _CosmeticImageState extends ConsumerState<CosmeticImage> {
   int index = 0;
   int? scheduledIndex;
+  int revision = 0;
   @override
   void didUpdateWidget(covariant CosmeticImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!listEquals(oldWidget.cosmeticIds, widget.cosmeticIds)) {
+      revision++;
       index = 0;
       scheduledIndex = null;
     }
@@ -33,8 +37,11 @@ class _CosmeticImageState extends ConsumerState<CosmeticImage> {
     if (scheduledIndex == index) return;
     scheduledIndex = index;
     final previous = index;
+    final previousRevision = revision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && index == previous) setState(() => index++);
+      if (mounted && revision == previousRevision && index == previous) {
+        setState(() => index++);
+      }
     });
   }
 
@@ -47,6 +54,7 @@ class _CosmeticImageState extends ConsumerState<CosmeticImage> {
   Widget build(BuildContext context) {
     ref.listen(cosmeticImagesRevisionProvider, (_, _) {
       setState(() {
+        revision++;
         index = 0;
         scheduledIndex = null;
       });
@@ -71,8 +79,8 @@ class _CosmeticImageState extends ConsumerState<CosmeticImage> {
                         _next();
                         return _placeholder();
                       }
-                  return Image(
-                    image: ref.read(cosmeticImageLoaderProvider)(url),
+                      return Image(
+                        image: ref.read(cosmeticImageLoaderProvider)(url),
                         key: ValueKey(url),
                         fit: BoxFit.contain,
                         errorBuilder: (_, _, _) {

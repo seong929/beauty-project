@@ -72,6 +72,7 @@ void main() {
       overrides: [
         authServiceProvider.overrideWith((ref) => const _Admin()),
         cosmeticDetailsProvider('c1').overrideWith((ref) async => _data),
+        cosmeticImageProvider('c1').overrideWith((ref) async => null),
         apiClientProvider.overrideWith(
           (ref) => MockClient((request) async {
             sent = request;
@@ -122,6 +123,7 @@ void main() {
       overrides: [
         authServiceProvider.overrideWith((ref) => const _Admin()),
         cosmeticDetailsProvider('c1').overrideWith((ref) async => _data),
+        cosmeticImageProvider('c1').overrideWith((ref) async => null),
         apiClientProvider.overrideWith(
           (ref) => MockClient((request) async {
             requests++;
@@ -133,7 +135,16 @@ void main() {
     addTearDown(container.dispose);
     await _open(tester, container);
     final target = find.widgetWithText(TextFormField, '목표 재고 수량');
-    await tester.ensureVisible(target);
+    await tester.scrollUntilVisible(
+      target,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.enterText(target, '5');
     await tester.ensureVisible(find.text('변경사항 저장'));
     await tester.tap(find.text('변경사항 저장'));

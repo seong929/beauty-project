@@ -67,6 +67,7 @@ void main() {
       overrides: [
         authServiceProvider.overrideWith((ref) => const _Auth('ADMIN')),
         cosmeticDetailsProvider('c1').overrideWith((ref) async => details),
+        cosmeticImageProvider('c1').overrideWith((ref) async => null),
         apiClientProvider.overrideWith(
           (ref) => MockClient(
             (request) async => http.Response('{"detail":"failed"}', 500),
@@ -87,7 +88,18 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byType(DropdownButtonFormField<String>),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('판매 중단').last);
@@ -206,6 +218,7 @@ void main() {
           authServiceProvider.overrideWith((ref) => _Auth(role)),
           distinctCosmeticsPageProvider.overrideWith((ref, args) async => []),
           cosmeticDetailsProvider('c1').overrideWith((ref) async => details),
+          cosmeticImageProvider('c1').overrideWith((ref) async => null),
         ],
       );
       addTearDown(container.dispose);
@@ -232,6 +245,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      if (role == 'ADMIN') {
+        await tester.scrollUntilVisible(
+          find.byType(DropdownButtonFormField<String>),
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byType(ListView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+      }
       expect(
         find.byType(DropdownButtonFormField<String>),
         role == 'ADMIN' ? findsOneWidget : findsNothing,
