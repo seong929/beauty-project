@@ -185,24 +185,17 @@ def checkout_cart(data: CheckoutRequest) -> dict:
                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                         (order_item_id, order_id, seq, inv_id, count, price, option),
                     )
-                    # 출고 대기 행: 배송 확정 전에는 delivery_id/outbound_on 모두 NULL.
-                    cur.execute(
-                        """INSERT INTO stock_outbounds
-                           (order_item_id, inventory_id, delivery_id,
-                            outbound_quantity, outbound_on)
-                           VALUES (%s, %s, NULL, %s, NULL)""",
-                        (order_item_id, inv_id, count),
-                    )
-                    remaining -= count
-                    purchased.append({
-                        "order_item_id": order_item_id,
-                        "cosmetic_id": item.cosmetic_id,
-                        "cosmetic_name": name,
-                        "inventory_id": inv_id,
-                        "quantity": count,
-                        "sale_option": option,
-                        "unit_price": price,
-                    })
+
+                remaining -= count
+                purchased.append({
+                    "order_item_id": order_item_id,
+                    "cosmetic_id": item.cosmetic_id,
+                    "cosmetic_name": name,
+                    "inventory_id": inv_id,
+                    "quantity": count,
+                    "sale_option": option,
+                    "unit_price": price,
+                })
                 total += price * item.quantity
 
             # 2. 결제 성공 시 주문한 상품 중 장바구니에 있던 상품만 삭제.
@@ -231,28 +224,29 @@ def checkout_cart(data: CheckoutRequest) -> dict:
         if conn is not None:
             conn.rollback()
         raise
+    
     except pymysql.MySQLError as exc:
         if conn is not None:
             conn.rollback()
+
         logger.exception("결제 SQL 실패: customer_id=%s", customer_id)
-        # 구형 DB는 stock_outbounds에 order_item_id 컬럼이 없어서
-        # 결제 마지막 단계에서 MySQL 1054 오류가 발생한다.
-        if (exc.args and exc.args[0] == 1054
-                and "order_item_id" in str(exc)):
-            raise HTTPException(
-                status_code=503,
-                detail=("DB 스키마가 구버전입니다. "
-                        "stock_outbounds 마이그레이션을 먼저 적용하세요."),
-            ) from exc
-        raise HTTPException(500, "결제 처리 중 DB 오류가 발생했습니다.") from exc
+
+        raise HTTPException(
+            status_code=500,
+            detail="결제 처리 중 DB 오류가 발생했습니다.",
+        ) from exc
+
     except Exception:
         if conn is not None:
             conn.rollback()
+
         logger.exception("결제 실패: customer_id=%s", customer_id)
         raise
+
     finally:
         if conn is not None:
             conn.close()
+
 
 
 
