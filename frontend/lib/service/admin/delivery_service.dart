@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -7,10 +6,10 @@ import '../../model/admin/delivery.dart';
 
 class DeliveryService {
   final String baseUrl;
+  final http.Client _client;
 
-  const DeliveryService({
-    required this.baseUrl,
-  });
+  DeliveryService({required this.baseUrl, http.Client? client})
+    : _client = client ?? http.Client();
 
   // HTTP 요청 헤더
   Map<String, String> _headers(String accessToken) {
@@ -30,9 +29,7 @@ class DeliveryService {
     String message = '배송 목록 조회에 실패했습니다.';
 
     try {
-      final data = jsonDecode(
-        utf8.decode(response.bodyBytes),
-      );
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
 
       if (data is Map<String, dynamic>) {
         final detail = data['detail'];
@@ -59,28 +56,20 @@ class DeliveryService {
   // 배송 목록 조회
   Future<List<Delivery>> fetchDeliveryList({
     required String accessToken,
+    bool isStaff = false,
   }) async {
-    final url = Uri.parse(
-      '$baseUrl/admin/deliveries',
-    );
+    final url = Uri.parse('$baseUrl/${isStaff ? 'staff' : 'admin'}/deliveries');
 
-    final response = await http.get(
-      url,
-      headers: _headers(accessToken),
-    );
+    final response = await _client.get(url, headers: _headers(accessToken));
 
     _checkResponse(response);
 
     // UTF-8 디코딩
-    final data = jsonDecode(
-      utf8.decode(response.bodyBytes),
-    ) as List<dynamic>;
+    final data = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
 
     // JSON 데이터를 Delivery 모델로 변환
     final deliveries = data.map((item) {
-      return Delivery.fromJson(
-        item as Map<String, dynamic>,
-      );
+      return Delivery.fromJson(item as Map<String, dynamic>);
     }).toList();
 
     return deliveries;

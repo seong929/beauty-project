@@ -1,14 +1,13 @@
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../model/admin/purchase_order.dart';
 
 class PurchaseOrderService {
   final String baseUrl;
+  final http.Client _client;
 
-  const PurchaseOrderService({
-    required this.baseUrl,
-  });
+  PurchaseOrderService({required this.baseUrl, http.Client? client})
+    : _client = client ?? http.Client();
 
   // 1. 발주 목록 조회
   Future<List<PurchaseOrder>> getPurchaseOrderList({
@@ -16,7 +15,7 @@ class PurchaseOrderService {
   }) async {
     final url = Uri.parse('$baseUrl/admin/purchase-orders');
 
-    final response = await http.get(
+    final response = await _client.get(
       url,
       headers: {
         'Accept': 'application/json',
@@ -39,16 +38,10 @@ class PurchaseOrderService {
       );
     }
 
-    final List<dynamic> jsonList = jsonDecode(
-      utf8.decode(response.bodyBytes),
-    );
+    final List<dynamic> jsonList = jsonDecode(utf8.decode(response.bodyBytes));
 
     return jsonList
-        .map(
-          (json) => PurchaseOrder.fromJson(
-            json as Map<String, dynamic>,
-          ),
-        )
+        .map((json) => PurchaseOrder.fromJson(json as Map<String, dynamic>))
         .toList();
   }
 
@@ -59,7 +52,7 @@ class PurchaseOrderService {
   }) async {
     final url = Uri.parse('$baseUrl/admin/purchase-orders');
 
-    final response = await http.post(
+    final response = await _client.post(
       url,
       headers: {
         'Content-Type': 'application/json',
@@ -82,13 +75,9 @@ class PurchaseOrderService {
     }
 
     if (response.statusCode == 409) {
-      final responseBody = jsonDecode(
-        utf8.decode(response.bodyBytes),
-      );
+      final responseBody = jsonDecode(utf8.decode(response.bodyBytes));
 
-      throw Exception(
-        responseBody['detail'] ?? '발주 등록이 불가능합니다.',
-      );
+      throw Exception(responseBody['detail'] ?? '발주 등록이 불가능합니다.');
     }
 
     if (response.statusCode != 201) {

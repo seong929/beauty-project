@@ -1,5 +1,7 @@
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../service/api_config.dart';
+import '../auth/api_client_provider.dart';
 
 import '../../service/admin/delivery_service.dart';
 import '../auth/auth_notifier.dart';
@@ -7,8 +9,9 @@ import 'delivery_state.dart';
 
 // 배송 API 서비스 Provider
 final deliveryServiceProvider = Provider<DeliveryService>((ref) {
-  return const DeliveryService(
-    baseUrl: 'http://127.0.0.1:8000',
+  return DeliveryService(
+    baseUrl: ApiConfig.baseUrl,
+    client: ref.read(apiClientProvider),
   );
 });
 
@@ -27,8 +30,8 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
       throw Exception('로그인이 필요합니다.');
     }
 
-    if (employee.employeeRole != 'ADMIN') {
-      throw Exception('관리자 권한이 필요합니다.');
+    if (employee.employeeRole != 'ADMIN' && employee.employeeRole != 'STAFF') {
+      throw Exception('배송 조회 권한이 없습니다.');
     }
 
     return employee.accessToken;
@@ -40,26 +43,21 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
       return;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
 
     try {
       final accessToken = _getAccessToken();
 
-      final deliveryService = ref.read(
-        deliveryServiceProvider,
-      );
+      final deliveryService = ref.read(deliveryServiceProvider);
 
       final deliveries = await deliveryService.fetchDeliveryList(
         accessToken: accessToken,
+        isStaff: ref.read(authProvider).isStaff,
       );
 
       // 기존에 선택한 배송이 목록에 남아 있는지 확인
       final selectedDeliveryExists = deliveries.any(
-        (delivery) =>
-            delivery.deliveryId == state.selectedDeliveryId,
+        (delivery) => delivery.deliveryId == state.selectedDeliveryId,
       );
 
       state = state.copyWith(
@@ -71,10 +69,7 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
       );
     }
   }
@@ -89,12 +84,7 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
 
   // 배송 상태 필터 변경
   void changeStatusFilter(String status) {
-    const allowedStatuses = {
-      'ALL',
-      'READY',
-      'IN_TRANSIT',
-      'DELIVERED',
-    };
+    const allowedStatuses = {'ALL', 'READY', 'IN_TRANSIT', 'DELIVERED'};
 
     if (!allowedStatuses.contains(status)) {
       return;
@@ -109,21 +99,16 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
 
   // 배송 선택 해제
   void clearSelectedDelivery() {
-    state = state.copyWith(
-      clearSelectedDeliveryId: true,
-    );
+    state = state.copyWith(clearSelectedDeliveryId: true);
   }
 
   // 오류 메시지 초기화
   void clearErrorMessage() {
-    state = state.copyWith(
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(clearErrorMessage: true);
   }
 }
 
 // 배송 상태 Provider
-final deliveryProvider =
-    NotifierProvider<DeliveryNotifier, DeliveryState>(
+final deliveryProvider = NotifierProvider<DeliveryNotifier, DeliveryState>(
   DeliveryNotifier.new,
 );

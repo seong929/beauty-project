@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,7 +5,6 @@ import '../../model/admin/purchase_order.dart';
 import '../../vm/admin/staff_purchase_order_notifier.dart';
 import 'inbound_page.dart';
 import '../../vm/auth/auth_notifier.dart';
-import '../auth/login_page.dart';
 
 class StaffPurchaseOrderPage extends ConsumerStatefulWidget {
   const StaffPurchaseOrderPage({super.key});
@@ -25,9 +23,7 @@ class _StaffPurchaseOrderPageState
     Future.microtask(() {
       if (!mounted) return;
 
-      ref
-          .read(staffPurchaseOrderProvider.notifier)
-          .getPurchaseOrderList();
+      ref.read(staffPurchaseOrderProvider.notifier).getPurchaseOrderList();
     });
   }
 
@@ -53,15 +49,11 @@ class _StaffPurchaseOrderPageState
   }
 
   void _selectOrder(PurchaseOrder order) {
-    ref
-        .read(staffPurchaseOrderProvider.notifier)
-        .selectPurchaseOrder(order);
+    ref.read(staffPurchaseOrderProvider.notifier).selectPurchaseOrder(order);
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const InboundPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const InboundPage()),
     );
   }
 
@@ -75,10 +67,7 @@ class _StaffPurchaseOrderPageState
           children: [
             Text(
               order.cosmeticName,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Text('발주 ID: ${order.purchaseOrderId}'),
@@ -94,9 +83,7 @@ class _StaffPurchaseOrderPageState
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: order.canInbound
-                    ? () => _selectOrder(order)
-                    : null,
+                onPressed: order.canInbound ? () => _selectOrder(order) : null,
                 icon: const Icon(Icons.inventory_2_outlined),
                 label: const Text('입고 등록'),
               ),
@@ -133,14 +120,6 @@ class _StaffPurchaseOrderPageState
             icon: const Icon(Icons.logout),
             onPressed: () {
               ref.read(authProvider.notifier).logout();
-
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginPage(),
-                ),
-                (route) => false,
-              );
             },
           ),
         ],
@@ -151,9 +130,7 @@ class _StaffPurchaseOrderPageState
           child: Builder(
             builder: (context) {
               if (state.isLoading) {
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
+                return const Center(child: CircularProgressIndicator());
               }
 
               if (state.errorMessage != null) {
@@ -163,17 +140,12 @@ class _StaffPurchaseOrderPageState
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          state.errorMessage!,
-                          textAlign: TextAlign.center,
-                        ),
+                        Text(state.errorMessage!, textAlign: TextAlign.center),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
                             ref
-                                .read(
-                                  staffPurchaseOrderProvider.notifier,
-                                )
+                                .read(staffPurchaseOrderProvider.notifier)
                                 .getPurchaseOrderList();
                           },
                           child: const Text('다시 조회'),
@@ -187,9 +159,7 @@ class _StaffPurchaseOrderPageState
               final orders = state.inboundAvailableOrders;
 
               if (orders.isEmpty) {
-                return const Center(
-                  child: Text('입고 가능한 발주가 없습니다.'),
-                );
+                return const Center(child: Text('입고 가능한 발주가 없습니다.'));
               }
 
               return RefreshIndicator(

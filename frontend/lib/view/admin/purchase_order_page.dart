@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,12 +8,10 @@ class PurchaseOrderPage extends ConsumerStatefulWidget {
   const PurchaseOrderPage({super.key});
 
   @override
-  ConsumerState<PurchaseOrderPage> createState() =>
-      _PurchaseOrderPageState();
+  ConsumerState<PurchaseOrderPage> createState() => _PurchaseOrderPageState();
 }
 
-class _PurchaseOrderPageState
-    extends ConsumerState<PurchaseOrderPage> {
+class _PurchaseOrderPageState extends ConsumerState<PurchaseOrderPage> {
   @override
   void initState() {
     super.initState();
@@ -22,9 +19,7 @@ class _PurchaseOrderPageState
     Future.microtask(() {
       if (!mounted) return;
 
-      ref
-          .read(purchaseOrderProvider.notifier)
-          .getPurchaseOrderList();
+      ref.read(purchaseOrderProvider.notifier).getPurchaseOrderList();
     });
   }
 
@@ -72,10 +67,9 @@ class _PurchaseOrderPageState
                         TextField(
                           controller: priceController,
                           enabled: !orderState.isProcessing,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
                             labelText: '개당 공급 단가',
                             suffixText: '원',
@@ -98,16 +92,11 @@ class _PurchaseOrderPageState
                         ? null
                         : () async {
                             final success = await ref
-                                .read(
-                                  purchaseOrderProvider.notifier,
-                                )
+                                .read(purchaseOrderProvider.notifier)
                                 .createPurchaseOrder(
-                                  approvalId:
-                                      approvalController.text,
-                                  manufacturerId:
-                                      manufacturerController.text,
-                                  unitSupplyPrice:
-                                      priceController.text,
+                                  approvalId: approvalController.text,
+                                  manufacturerId: manufacturerController.text,
+                                  unitSupplyPrice: priceController.text,
                                 );
 
                             if (!dialogContext.mounted) return;
@@ -117,12 +106,9 @@ class _PurchaseOrderPageState
 
                               if (!mounted) return;
 
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(
+                              ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text(
-                                    '발주 등록이 완료되었습니다.',
-                                  ),
+                                  content: Text('발주 등록이 완료되었습니다.'),
                                 ),
                               );
                             } else {
@@ -130,12 +116,9 @@ class _PurchaseOrderPageState
                                   .read(purchaseOrderProvider)
                                   .errorMessage;
 
-                              ScaffoldMessenger.of(dialogContext)
-                                  .showSnackBar(
+                              ScaffoldMessenger.of(dialogContext).showSnackBar(
                                 SnackBar(
-                                  content: Text(
-                                    error ?? '발주 등록에 실패했습니다.',
-                                  ),
+                                  content: Text(error ?? '발주 등록에 실패했습니다.'),
                                 ),
                               );
                             }
@@ -144,9 +127,7 @@ class _PurchaseOrderPageState
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('등록'),
                   ),
@@ -187,33 +168,37 @@ class _PurchaseOrderPageState
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: ElevatedButton.icon(
-              onPressed: orderState.isProcessing
-                  ? null
-                  : _showCreateDialog,
+              onPressed: orderState.isProcessing ? null : _showCreateDialog,
               icon: const Icon(Icons.add),
               label: const Text('발주 등록'),
             ),
           ),
         ],
       ),
-      body: Row(
-        children: [
-          // 왼쪽: 발주 목록
-          Expanded(
-            flex: 4,
-            child: _buildPurchaseOrderList(orderState),
-          ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 700;
+          return Flex(
+            direction: compact ? Axis.vertical : Axis.horizontal,
+            children: [
+              // 왼쪽: 발주 목록
+              Expanded(flex: 4, child: _buildPurchaseOrderList(orderState)),
 
-          const VerticalDivider(width: 1),
+              if (compact)
+                const Divider(height: 1)
+              else
+                const VerticalDivider(width: 1),
 
-          // 오른쪽: 발주 상세
-          Expanded(
-            flex: 6,
-            child: _buildPurchaseOrderDetail(
-              orderState.selectedPurchaseOrder,
-            ),
-          ),
-        ],
+              // 오른쪽: 발주 상세
+              Expanded(
+                flex: 6,
+                child: _buildPurchaseOrderDetail(
+                  orderState.selectedPurchaseOrder,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -221,29 +206,21 @@ class _PurchaseOrderPageState
   // 발주 목록 영역
   Widget _buildPurchaseOrderList(dynamic orderState) {
     if (orderState.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
-    if (orderState.errorMessage != null &&
-        orderState.purchaseOrders.isEmpty) {
-      return Center(
-        child: Text(orderState.errorMessage!),
-      );
+    if (orderState.errorMessage != null && orderState.purchaseOrders.isEmpty) {
+      return Center(child: Text(orderState.errorMessage!));
     }
 
     if (orderState.purchaseOrders.isEmpty) {
-      return const Center(
-        child: Text('등록된 발주가 없습니다.'),
-      );
+      return const Center(child: Text('등록된 발주가 없습니다.'));
     }
 
     return ListView.builder(
       itemCount: orderState.purchaseOrders.length,
       itemBuilder: (context, index) {
-        final PurchaseOrder order =
-            orderState.purchaseOrders[index];
+        final PurchaseOrder order = orderState.purchaseOrders[index];
 
         final selected =
             orderState.selectedPurchaseOrder?.purchaseOrderId ==
@@ -259,9 +236,7 @@ class _PurchaseOrderPageState
           isThreeLine: true,
           trailing: Text(order.purchaseStatus),
           onTap: () {
-            ref
-                .read(purchaseOrderProvider.notifier)
-                .selectPurchaseOrder(order);
+            ref.read(purchaseOrderProvider.notifier).selectPurchaseOrder(order);
           },
         );
       },
@@ -271,9 +246,7 @@ class _PurchaseOrderPageState
   // 발주 상세 영역
   Widget _buildPurchaseOrderDetail(PurchaseOrder? order) {
     if (order == null) {
-      return const Center(
-        child: Text('발주 내역을 선택해 주세요.'),
-      );
+      return const Center(child: Text('발주 내역을 선택해 주세요.'));
     }
 
     return SingleChildScrollView(
@@ -281,18 +254,12 @@ class _PurchaseOrderPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '발주 상세 정보',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
+          Text('발주 상세 정보', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 24),
 
           _detailRow('발주 ID', order.purchaseOrderId),
           _detailRow('품의 ID', order.approvalId),
-          _detailRow(
-            '발주 차수',
-            '${order.purchaseOrderSeq}차',
-          ),
+          _detailRow('발주 차수', '${order.purchaseOrderSeq}차'),
           _detailRow('상품명', order.cosmeticName),
           _detailRow('상품 ID', order.cosmeticId),
           _detailRow('제조사', order.manufacturerName),
@@ -300,17 +267,11 @@ class _PurchaseOrderPageState
           _detailRow(
             '발주일',
             '${order.orderedOn.year}-'
-            '${order.orderedOn.month.toString().padLeft(2, '0')}-'
-            '${order.orderedOn.day.toString().padLeft(2, '0')}',
+                '${order.orderedOn.month.toString().padLeft(2, '0')}-'
+                '${order.orderedOn.day.toString().padLeft(2, '0')}',
           ),
-          _detailRow(
-            '발주 수량',
-            '${order.orderQuantity}개',
-          ),
-          _detailRow(
-            '공급 단가',
-            '${order.unitSupplyPrice.toStringAsFixed(2)}원',
-          ),
+          _detailRow('발주 수량', '${order.orderQuantity}개'),
+          _detailRow('공급 단가', '${order.unitSupplyPrice.toStringAsFixed(2)}원'),
           _detailRow(
             '총 발주 금액',
             '${order.orderTotalAmount.toStringAsFixed(2)}원',
@@ -331,14 +292,10 @@ class _PurchaseOrderPageState
             width: 140,
             child: Text(
               label,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          Expanded(
-            child: Text(value),
-          ),
+          Expanded(child: Text(value)),
         ],
       ),
     );
