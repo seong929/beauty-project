@@ -82,8 +82,9 @@ class _CosmeticCreatePageState extends ConsumerState<CosmeticCreatePage> {
 
   Future<void> _submit() async {
     if (_saving) return;
-    if (_createdCosmeticId == null && !_formKey.currentState!.validate())
+    if (_createdCosmeticId == null && !_formKey.currentState!.validate()) {
       return;
+    }
     if (_image == null) {
       ScaffoldMessenger.of(
         context,

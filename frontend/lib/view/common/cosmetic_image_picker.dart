@@ -57,17 +57,20 @@ class CosmeticImagePicker extends ConsumerWidget {
                           .pickImage(source: ImageSource.gallery);
                       if (file == null) return;
                       final bytes = await file.readAsBytes();
-                      if (bytes.isEmpty || bytes.length > 10 * 1024 * 1024)
+                      if (bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
                         throw Exception('10MB 이하의 이미지를 선택해 주세요.');
+                      }
                       if (!RegExp(
                         r'\.(png|jpe?g|webp)$',
                         caseSensitive: false,
-                      ).hasMatch(file.name))
+                      ).hasMatch(file.name)) {
                         throw Exception('PNG, JPG 또는 WebP 이미지를 선택해 주세요.');
-                      if (context.mounted)
+                      }
+                      if (context.mounted) {
                         onChanged(SelectedCosmeticImage(bytes, file.name));
+                      }
                     } catch (error) {
-                      if (context.mounted)
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -75,6 +78,7 @@ class CosmeticImagePicker extends ConsumerWidget {
                             ),
                           ),
                         );
+                      }
                     }
                   },
           ),
