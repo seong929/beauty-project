@@ -1,5 +1,3 @@
-// ignore_for_file: unintended_html_in_doc_comment
-
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -28,9 +26,10 @@ class StaffInventoryService {
   StaffInventoryService({
     required String baseUrl,
     this.enableTemporaryAuth = false,
-    this._accessToken,
+    String? accessToken,
     http.Client? client,
   })  : baseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), ''),
+        _accessToken = accessToken,
         _client = client ?? createStaffInventoryHttpClient();
 
   final String baseUrl;
@@ -208,6 +207,32 @@ class StaffInventoryService {
     String path, [
     Map<String, dynamic>? query,
   ]) => _get(path, query);
+
+  /// 다른 직원 도메인에서도 같은 로그인 JWT/임시 세션 쿠키로 PATCH합니다.
+  /// 주문 상태 변경 등 확정 버튼을 누른 뒤에만 호출하세요.
+  Future<Object?> patchAuthorizedJson(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final uri = Uri.parse('$baseUrl$path');
+    late http.Response response;
+    try {
+      response = await _client.patch(
+        uri,
+        headers: {..._requestHeaders(), 'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw StaffInventoryApiException('서버 수정 요청 실패: $error');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StaffInventoryApiException(
+        'HTTP ${response.statusCode}: ${_errorDetail(response)}',
+        response.statusCode,
+      );
+    }
+    return _decodeResponse(response);
+  }
 
   /// 수량 차감은 사용자가 폐기 확인을 누를 때에만 실행합니다.
   Future<Map<String, dynamic>> discardInventory({

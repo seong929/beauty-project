@@ -44,6 +44,22 @@ class StaffOrderService {
     return StaffOrder.fromJson(asOrderJson(result));
   }
 
+  /// PATCH /staff/orders/{order_id}/status
+  /// 서버와 동일하게 일반 직원 변경은 PAID -> PREPARING만 허용합니다.
+  Future<StaffOrder> updateOrderStatus({
+    required String orderId,
+    required StaffOrderStatus newStatus,
+  }) async {
+    if (newStatus != StaffOrderStatus.PREPARING) {
+      throw StateError('일반 주문 상태 변경은 PAID → PREPARING만 허용됩니다.');
+    }
+    final result = await _authorizedClient.patchAuthorizedJson(
+      '/staff/orders/${Uri.encodeComponent(orderId)}/status',
+      <String, dynamic>{'order_status': newStatus.name},
+    );
+    return StaffOrder.fromJson(asOrderJson(result));
+  }
+
   Future<List<StaffOrderItem>> getOrderItems(String orderId) async {
     final result = await _authorizedClient.getAuthorizedJson(
       '/staff/orders/${Uri.encodeComponent(orderId)}/items',

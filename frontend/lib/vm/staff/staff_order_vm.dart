@@ -124,3 +124,39 @@ final staffOrderDetailProvider = FutureProvider.family<StaffOrder, String>(
 final staffOrderItemsProvider = FutureProvider.family<List<StaffOrderItem>, String>(
   (ref, orderId) => ref.read(staffOrderServiceProvider).getOrderItems(orderId),
 );
+
+/// 주문 상태 갱신은 명시적으로 눌렀을 때만 수행합니다.
+/// 동시 갱신을 막고, 성공 시 상세 및 모든 주문 목록 필터 캐시를 무효화합니다.
+class StaffOrderStatusUpdateVm extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  Future<StaffOrder> updateStatus({
+    required String orderId,
+    required StaffOrderStatus newStatus,
+  }) async {
+    if (state != null) {
+      throw StateError('다른 주문 상태 변경 요청을 처리 중입니다.');
+    }
+    if (newStatus != StaffOrderStatus.PREPARING) {
+      throw StateError('직원이 일반 주문 API로 변경할 수 있는 상태는 PREPARING뿐입니다.');
+    }
+    state = orderId;
+    try {
+      final updated = await ref.read(staffOrderServiceProvider).updateOrderStatus(
+        orderId: orderId,
+        newStatus: newStatus,
+      );
+      ref.invalidate(staffOrderDetailProvider(orderId));
+      ref.invalidate(staffOrdersPageProvider);
+      return updated;
+    } finally {
+      state = null;
+    }
+  }
+}
+
+final staffOrderStatusUpdateVmProvider =
+    NotifierProvider<StaffOrderStatusUpdateVm, String?>(
+  StaffOrderStatusUpdateVm.new,
+);

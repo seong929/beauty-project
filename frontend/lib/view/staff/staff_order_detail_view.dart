@@ -80,6 +80,8 @@ class _StaffOrderDetailViewState extends ConsumerState<StaffOrderDetailView> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                _OrderStatusEditor(order: order, tablet: tablet),
+                const SizedBox(height: 12),
                 Card(
                   clipBehavior: Clip.antiAlias,
                   child: Column(
@@ -200,6 +202,119 @@ class _OrderItemRow extends StatelessWidget {
           _OrderDetailField('적립 포인트', '${item.earnedPoints}P'),
         ]),
       ]),
+    );
+  }
+}
+
+/// 결제·배송·환불 상태를 임의 수정하지 않고, 상품 준비 시작만 허용합니다.
+/// 서버에서도 PAID -> PREPARING을 다시 검사하므로 UI 우회를 방지합니다.
+class _OrderStatusEditor extends ConsumerWidget {
+  const _OrderStatusEditor({required this.order, required this.tablet});
+
+  final StaffOrder order;
+  final bool tablet;
+
+  Future<void> _startPreparing(BuildContext context, WidgetRef ref) async {
+    if (order.status != StaffOrderStatus.PAID) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('상품 준비 시작 확인'),
+        content: Text(
+          '주문번호: ${order.orderId}\n'
+          '결제 완료(PAID) → 상품 준비 중(PREPARING)\n\n'
+          '실제 결제 완료가 확인된 주문만 준비를 시작하세요. '
+          '이 작업은 주문 상태만 변경하며 재고 출고나 배송 처리는 수행하지 않습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('상품 준비 시작'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    try {
+      final updated = await ref.read(staffOrderStatusUpdateVmProvider.notifier)
+          .updateStatus(
+            orderId: order.orderId,
+            newStatus: StaffOrderStatus.PREPARING,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('주문 상태가 ${updated.status.label}(으)로 변경되었습니다.')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('상품 준비 시작 실패: $error')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final busy = ref.watch(staffOrderStatusUpdateVmProvider) != null;
+    final canPrepare = order.status == StaffOrderStatus.PAID;
+    final message = switch (order.status) {
+      StaffOrderStatus.PENDING =>
+        '결제 전 주문입니다. 결제 결과는 결제 기능에서 확정해야 합니다.',
+      StaffOrderStatus.PAID =>
+        '결제 완료된 주문입니다. 직원이 실제 상품 준비를 시작할 수 있습니다.',
+      StaffOrderStatus.PREPARING =>
+        '준비 중인 주문입니다. 출고는 전용 출고 API에서 처리해야 합니다.',
+      StaffOrderStatus.SHIPPED =>
+        '출고된 주문입니다. 배송 완료 여부는 배송 이력을 통해 확인해야 합니다.',
+      StaffOrderStatus.DELIVERED =>
+        '배송 완료 주문입니다. 이 화면에서는 상태를 변경할 수 없습니다.',
+      StaffOrderStatus.CANCELLED =>
+        '취소된 주문입니다. 이 화면에서는 상태를 변경할 수 없습니다.',
+      StaffOrderStatus.RETURNED =>
+        '반품 완료 주문입니다. 이 화면에서는 상태를 변경할 수 없습니다.',
+    };
+
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(tablet ? 24 : 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('주문 처리', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text('현재 상태: ${order.status.label} (${order.status.name})'),
+            const SizedBox(height: 12),
+            Text(message, style: theme.textTheme.bodyMedium),
+            if (canPrepare) ...[
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: busy ? null : () => _startPreparing(context, ref),
+                icon: busy
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.inventory_2_outlined),
+                label: Text(busy ? '처리 중...' : '상품 준비 시작'),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              '결제·출고·배송 완료·취소·반품은 관련 데이터와 함께 처리해야 하므로 '
+              '이 화면에서 임의로 주문 상태를 변경할 수 없습니다.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

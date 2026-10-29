@@ -203,28 +203,23 @@ def get_order_detail(
     description="""
     특정 주문의 주문 상태를 변경합니다.
 
-    **변경 가능한 상태**
-    - `PENDING`: 주문 대기
-    - `PAID`: 결제 완료
-    - `PREPARING`: 상품 준비 중
-    - `SHIPPED`: 배송 중
-    - `DELIVERED`: 배송 완료
-    - `CANCELLED`: 주문 취소
-    - `RETURNED`: 반품 완료
+    **허용되는 유일한 일반 상태 변경**
+    - `PAID -> PREPARING`: 직원이 결제 완료된 주문의 상품 준비 시작
 
-    **처리 방식**
-    - 주문 번호로 변경 대상을 확인합니다.
-    - 요청한 상태로 주문 상태를 변경합니다.
-    - 변경에 성공하면 갱신된 주문 정보를 반환합니다.
-    - 오류 발생 시 데이터베이스 변경을 취소합니다.
+    **이 API에서 금지되는 상태 변경**
+    - PENDING -> PAID: 결제 흐름 전용
+    - PREPARING -> SHIPPED: 전용 출고 API
+    - SHIPPED -> DELIVERED: 배송 상태 확인/완료 처리 전용
+    - CANCELLED / RETURNED: 취소·환불·반품 전용
+    - 상태 되돌리기 및 그 외 임의 변경
 
-    현재 구현에서는 주문 상태 간 전환 순서를
-    별도로 제한하지 않습니다.
+    변경 가능한 상태와 현재 상태를 모두 서버에서 검사합니다.
+    다른 상태 변경 요청은 409 Conflict로 거절합니다.
     """,
     responses={
         400: {"description": "주문 번호가 올바르지 않음"},
         404: {"description": "해당 주문이 존재하지 않음"},
-        409: {"description": "이미 동일한 주문 상태로 설정됨"},
+        409: {"description": "허용되지 않는 주문 상태 변경"},
         422: {"description": "주문 상태 입력값 검증 실패"},
         500: {"description": "주문 상태 변경 중 서버 오류"},
         503: {"description": "데이터베이스 연결 실패"}
