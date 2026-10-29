@@ -1,5 +1,6 @@
 
 import logging
+from datetime import datetime, timezone, timedelta
 
 import pymysql
 from fastapi import HTTPException
@@ -7,6 +8,7 @@ from fastapi import HTTPException
 from database import get_connection
 
 logger = logging.getLogger(__name__)
+KST = timezone(timedelta(hours=9), name="KST")
 
 
 def _allocate_id(cursor, scope, table, column, prefix):
@@ -40,6 +42,120 @@ def _allocate_id(cursor, scope, table, column, prefix):
     )
     cursor.execute("SELECT LAST_INSERT_ID() AS seq")
     return f"{prefix}{cursor.fetchone()['seq']}"
+
+
+def _find_pipeline_blocker(cursor, cosmetic_id: str,
+                           current_qty: int, target_qty: int) -> dict | None:
+    """진행 중인 발주와 아직 발주되지 않은 품의를 독립적으로 확인한다.
+
+    자동 품의는 기존 approvals.requested_quantity CHECK 제약을 유지한다.
+    따라서 미입고 예정량을 요청량에서 빼서 새 품의를 만들지 않고,
+    진행 중인 공급 절차가 있다면 신규 자동 품의를 보류한다.
+    """
+    # (A) 활성 발주는 품의가 APPROVED인지와 무관하게 확인해야 한다.
+    # 각 발주별 입고 누적량을 조회하여 PARTIALLY_RECEIVED도 다룬다.
+    cursor.execute(
+        """
+        SELECT po.purchase_order_id, po.approval_id,
+               po.purchase_status, po.order_quantity,
+               COALESCE((
+                   SELECT SUM(ih.inbound_quantity)
+                   FROM inbound_history AS ih
+                   WHERE ih.purchase_order_id = po.purchase_order_id
+               ), 0) AS received_quantity
+        FROM purchase_orders AS po
+        JOIN approvals AS a ON a.approval_id = po.approval_id
+        WHERE a.cosmetic_id = %s
+          AND po.purchase_status IN (
+              'REQUESTED', 'ORDERED', 'PARTIALLY_RECEIVED'
+          )
+        ORDER BY po.ordered_on DESC, po.purchase_order_id DESC
+        """,
+        (cosmetic_id,),
+    )
+    active_orders = cursor.fetchall()
+    if active_orders:
+        order_details = []
+        pending_quantity = 0
+        inconsistent = False
+        for order in active_orders:
+            ordered = int(order["order_quantity"])
+            received = int(order["received_quantity"])
+            remaining = ordered - received
+            # 입고량이 발주량 이상인데 상태가 진행 중이면 정합성 이상:
+            # 조용히 다음 품의를 만들지 않고 관리자가 검수하도록 보류한다.
+            if remaining <= 0:
+                inconsistent = True
+            pending_quantity += max(0, remaining)
+            order_details.append({
+                "purchase_order_id": order["purchase_order_id"],
+                "approval_id": order["approval_id"],
+                "purchase_status": order["purchase_status"],
+                "ordered_quantity": ordered,
+                "received_quantity": received,
+                "remaining_quantity": max(0, remaining),
+            })
+        return {
+            "cosmetic_id": cosmetic_id,
+            "result": ("INCONSISTENT_PURCHASE_ORDER" if inconsistent
+                       else "OPEN_PURCHASE_ORDER_EXISTS"),
+            "current_quantity": current_qty,
+            "target_quantity": target_qty,
+            "incoming_quantity": pending_quantity,
+            "projected_quantity": current_qty + pending_quantity,
+            "projected_shortfall": max(0, target_qty - current_qty - pending_quantity),
+            "purchase_orders": order_details,
+        }
+
+    # (B) 발주가 아직 등록되지 않은 결재 대기/승인 품의.
+    # 취소/완료된 발주가 연결된 승인 품의는 재신청 방해 요인이 아니다.
+    # 신규 발주는 현재 1품의 1발주이며, 취소 발주에 재발주는 불가하므로
+    # 재고가 부족하면 별도의 신규 품의를 허용한다.
+    cursor.execute(
+        """
+        SELECT pending.approval_id, pending.requested_quantity,
+               pending.approval_status
+        FROM (
+            SELECT a.approval_id, a.requested_quantity, a.requested_on,
+                   (
+                       SELECT h.approval_status
+                       FROM approval_status_history AS h
+                       WHERE h.approval_id = a.approval_id
+                       ORDER BY h.changed_at DESC,
+                                CAST(SUBSTRING(h.status_history_id, 5)
+                                     AS UNSIGNED) DESC
+                       LIMIT 1
+                   ) AS approval_status
+            FROM approvals AS a
+            WHERE a.cosmetic_id = %s
+              AND NOT EXISTS (
+                  SELECT 1 FROM purchase_orders AS po
+                  WHERE po.approval_id = a.approval_id
+              )
+        ) AS pending
+        WHERE pending.approval_status IN ('REQUESTED', 'APPROVED')
+        ORDER BY pending.requested_on DESC, pending.approval_id DESC
+        """,
+        (cosmetic_id,),
+    )
+    pending_approvals = cursor.fetchall()
+    if pending_approvals:
+        return {
+            "cosmetic_id": cosmetic_id,
+            "result": "OPEN_APPROVAL_EXISTS",
+            "current_quantity": current_qty,
+            "target_quantity": target_qty,
+            "approval_id": pending_approvals[0]["approval_id"],
+            "pending_approvals": [
+                {
+                    "approval_id": a["approval_id"],
+                    "approval_status": a["approval_status"],
+                    "requested_quantity": int(a["requested_quantity"]),
+                }
+                for a in pending_approvals
+            ],
+        }
+    return None
 
 
 def _process_cosmetic(cosmetic_id: str) -> dict:
@@ -150,50 +266,14 @@ def _process_cosmetic(cosmetic_id: str) -> dict:
                     "current_quantity": current_qty
                 }
 
-            # 5. 기존 미완료 품의 확인
-            cursor.execute(
-                """
-                SELECT a.approval_id
-                FROM approvals a
-                WHERE a.cosmetic_id = %s
-                  AND (
-                    SELECT h.approval_status
-                    FROM approval_status_history h
-                    WHERE h.approval_id = a.approval_id
-                    ORDER BY h.changed_at DESC,
-                        CAST(SUBSTRING(
-                            h.status_history_id, 5
-                        ) AS UNSIGNED) DESC
-                    LIMIT 1
-                  ) IN ('REQUESTED', 'APPROVED')
-                  AND (
-                    NOT EXISTS (
-                        SELECT 1
-                        FROM purchase_orders po
-                        WHERE po.approval_id = a.approval_id
-                    )
-                    OR EXISTS (
-                        SELECT 1
-                        FROM purchase_orders po
-                        WHERE po.approval_id = a.approval_id
-                          AND po.purchase_status NOT IN (
-                              'RECEIVED', 'CANCELLED'
-                          )
-                    )
-                  )
-                LIMIT 1
-                """,
-                (cosmetic_id,)
+            # 5. 발주와 품의를 분리해서 검토한다.
+            # 승인 상태 이력이 변경되더라도 실제 발주가 남아 있으면
+            # 신규 품의가 중복 생성되지 않아야 한다.
+            pipeline_blocker = _find_pipeline_blocker(
+                cursor, cosmetic_id, current_qty, target_qty
             )
-
-            existing = cursor.fetchone()
-
-            if existing is not None:
-                return {
-                    "cosmetic_id": cosmetic_id,
-                    "result": "OPEN_APPROVAL_EXISTS",
-                    "approval_id": existing["approval_id"]
-                }
+            if pipeline_blocker is not None:
+                return pipeline_blocker
 
             # 6. 결재 담당자 선택
             # 실제 담당자 배정 정책이 없다면
@@ -244,7 +324,7 @@ def _process_cosmetic(cosmetic_id: str) -> dict:
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s,
-                    %s, CURDATE()
+                    %s, %s
                 )
                 """,
                 (
@@ -254,7 +334,8 @@ def _process_cosmetic(cosmetic_id: str) -> dict:
                     target_qty,
                     current_qty,
                     requested_qty,
-                    "자동 재고 보충 품의"
+                    "자동 재고 보충 품의",
+                    datetime.now(KST).date()
                 )
             )
 
