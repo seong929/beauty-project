@@ -1,5 +1,6 @@
 import logging
 import pymysql
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from database import get_connection
@@ -13,7 +14,9 @@ def get_available_order_list_from_page(
     count: int,
     asc: bool,
     statuses: list[str] | None = None,
-    customer_id: str | None = None
+    customer_id: str | None = None,
+    start_at: datetime | None = None,
+    end_before: datetime | None = None,
 ):
     if page < 1:
         raise HTTPException(
@@ -77,6 +80,15 @@ def get_available_order_list_from_page(
             if customer_id is not None:
                 conditions.append("customer_id = %s")
                 params.append(customer_id)
+
+            # 반열림 구간 [start_at, end_before)으로 경계를 정확하게 표현합니다.
+            # 파라미터 바인딩을 사용하여 SQL 인젝션을 방지합니다.
+            if start_at is not None:
+                conditions.append("ordered_at >= %s")
+                params.append(start_at)
+            if end_before is not None:
+                conditions.append("ordered_at < %s")
+                params.append(end_before)
 
             where_clause = " AND ".join(conditions)
 
@@ -250,30 +262,42 @@ def update_order_status(
                     detail="해당 주문을 찾을 수 없습니다."
                 )
 
-            # SHIPPED로의 진입은 재고 차감 전용 API에서만 허용.
-            # 출고한 주문을 일반 API로 되돌려 재출고하는 것도 차단.
-            if order_status == "SHIPPED" or order["order_status"] == "SHIPPED":
+            # 주문 상태를 임의로 덮어쓰면 결제/출고/배송/취소/반품
+            # 데이터가 서로 불일치하게 됩니다. 일반 직원 상태 변경에서
+            # 허용하는 유일한 업무 전환은 PAID -> PREPARING입니다.
+            if order_status != "PREPARING":
                 raise HTTPException(
                     status_code=409,
-                    detail="SHIPPED 상태 진입은 전용 출고 API를 이용해야 하며, 출고된 주문은 일반 상태 변경 API로 수정할 수 없습니다."
+                    detail=(
+                        "이 API에서는 결제 완료(PAID) 주문의 상품 준비 시작"
+                        "(PREPARING)만 처리할 수 있습니다. 결제, 출고, "
+                        "배송 완료, 취소, 반품은 각 전용 업무 API를 이용하세요."
+                    ),
                 )
 
-            # 기존 상태와 동일한 경우
-            if order["order_status"] == order_status:
+            if order["order_status"] != "PAID":
                 raise HTTPException(
                     status_code=409,
-                    detail="이미 해당 상태로 설정된 주문입니다."
+                    detail=(
+                        f"PAID 상태의 주문만 준비를 시작할 수 있습니다. "
+                        f"현재 상태: {order['order_status']}"
+                    ),
                 )
 
-            # 상태 변경
+            # 현재 상태도 조건에 포함해 데이터 변경 경합을 방어합니다.
             cursor.execute(
                 """
                 UPDATE orders
-                SET order_status = %s
-                WHERE order_id = %s
+                SET order_status = 'PREPARING'
+                WHERE order_id = %s AND order_status = 'PAID'
                 """,
-                (order_status, order_id)
+                (order_id,)
             )
+            if cursor.rowcount != 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="주문 상태가 다른 요청에 의해 변경되어 처리할 수 없습니다.",
+                )
 
             # 변경된 주문 정보 반환
             cursor.execute(

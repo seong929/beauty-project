@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 class CosmeticCreateRequest(BaseModel):
     model_config = ConfigDict(
@@ -73,3 +73,24 @@ class CosmeticCreateResponse(BaseModel):
     cosmetic_id: str
     registration_id: str
     message: str
+
+
+class CosmeticSaleStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sale_status: Literal["ON_SALE", "DISCONTINUED"]
+
+
+class CosmeticDetailsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    sale_price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    unit_cost: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    min_stock_qty: int = Field(ge=0, le=4294967295)
+    target_stock_qty: int = Field(ge=0, le=4294967295)
+    volume_text: str = Field(min_length=1, max_length=50)
+    sale_status: Literal["ON_SALE", "DISCONTINUED"]
+
+    @model_validator(mode='after')
+    def validate_stock_targets(self):
+        if self.target_stock_qty <= self.min_stock_qty:
+            raise ValueError('목표 재고 수량은 최소 재고 수량보다 커야 합니다.')
+        return self

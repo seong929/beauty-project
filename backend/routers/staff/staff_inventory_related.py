@@ -23,6 +23,13 @@ router = APIRouter(
     dependencies=[Depends(require_staff)]
 )
 
+class InventoryFilterStatus(str, Enum):
+    MAINTAIN = "MAINTAIN"
+    HOLD = "HOLD"
+    DISCARD = "DISCARD"
+    DISCARD_COMPLETED = "DISCARD_COMPLETED"
+
+
 class InventoryOrderBy(str, Enum):
     RECEIVED_ON = "received_on"
     EXPIRES_ON = "expires_on"
@@ -38,7 +45,8 @@ class InventoryOrderBy(str, Enum):
     - `inventory_status`: 재고 상태
       - MAINTAIN: 유지
       - HOLD: 보류
-      - DISCARD: 폐기
+      - DISCARD: 폐기 대기 (수량 >= 1)
+      - DISCARD_COMPLETED: 폐기 완료 (수량 = 0)
     - `sale_option`: 판매 옵션
       - NORMAL: 일반
       - NEAR_EXPIRY: 사용기한 임박
@@ -77,7 +85,7 @@ def get_inventory_by_cosmetic_id(
         )
     ],
     inventory_status: Annotated[
-        InventoryStatus | None,
+        InventoryFilterStatus | None,
         Query(description="재고 상태 필터 (생략 시 전체)")
     ] = None,
     sale_option: Annotated[
@@ -127,12 +135,12 @@ def get_inventory_by_cosmetic_id(
     "/inventory/by-status",
     summary="상태별 재고 분류 및 필터 조회",
     description=(
-        "MAINTAIN, HOLD, DISCARD 상태별 재고 수량을 "
+        "MAINTAIN, HOLD, DISCARD(수량>0), DISCARD_COMPLETED(수량=0) 상태별 재고 수량을 "
         "집계하고 조건에 맞는 재고 목록을 반환합니다."
     )
 )
 def get_inventory_grouped_by_status(
-    inventory_status: InventoryStatus | None = Query(
+    inventory_status: InventoryFilterStatus | None = Query(
         default=None,
         description="조회할 재고 상태"
     ),
@@ -143,7 +151,10 @@ def get_inventory_grouped_by_status(
     sale_option: SaleOption | None = Query(
         default=None,
         description="판매 옵션"
-    )
+    ),
+    page: int = Query(default=1, ge=1, description="페이지 번호 (1부터)"),
+    count: int = Query(default=20, ge=1, le=100, description="한 페이지의 재고 수"),
+    descending: bool = Query(default=True, description="true: DISCARD부터, false: MAINTAIN부터")
 ):
     return staff_inventory_service.get_inventory_grouped_by_status(
         inventory_status=(
@@ -154,7 +165,10 @@ def get_inventory_grouped_by_status(
         sale_option=(
             sale_option.value
             if sale_option is not None else None
-        )
+        ),
+        page=page,
+        count=count,
+        descending=descending,
     )
 
 
@@ -185,3 +199,27 @@ def discard_inventory(
         inventory_id=inventory_id,
         quantity=body.quantity
     )
+
+
+
+@router.get("/inventory/{inventory_id}/inbound", summary="재고 배치별 입고 이력 조회")
+def get_inventory_inbound_history(
+    inventory_id: str = Path(min_length=1, description="재고 배치 ID"),
+):
+    return staff_inventory_service.get_inventory_inbound_history(inventory_id)
+
+
+@router.get("/inventory/{inventory_id}/outbounds", summary="재고 배치별 출고 예약·확정 이력 조회")
+def get_inventory_outbound_history(
+    inventory_id: str = Path(min_length=1, description="재고 배치 ID"),
+    page: int = Query(default=1, ge=1, description="페이지 번호"),
+    count: int = Query(default=20, ge=1, le=100, description="페이지당 출고 내역 건수"),
+):
+    return staff_inventory_service.get_inventory_outbound_history(inventory_id, page, count)
+
+
+@router.get("/inventory/{inventory_id}", summary="재고 배치 상세 조회")
+def get_inventory_detail(
+    inventory_id: str = Path(min_length=1, description="재고 배치 ID"),
+):
+    return staff_inventory_service.get_inventory_detail(inventory_id)

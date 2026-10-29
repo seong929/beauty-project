@@ -3,6 +3,8 @@
 from database import get_connection
 from fastapi import HTTPException
 from schemas.admin.approval_schema import ApprovalDecisionRequest
+from decimal import Decimal
+from services.system.automatic_approval_service import _allocate_id
 
 def get_approval_list():
     conn = get_connection()
@@ -14,6 +16,17 @@ def get_approval_list():
                     a.approval_id,
                     a.cosmetic_id,
                     c.cosmetic_name,
+                    c.manufacturer_id,
+                    m.manufacturer_name,
+                    c.category_id,
+                    c.cosmetic_name_seq,
+                    (SELECT v.volume_text FROM cosmetic_volume_history v
+                     WHERE v.cosmetic_id = c.cosmetic_id
+                     ORDER BY v.changed_on DESC, CAST(SUBSTRING(v.change_id, 5) AS UNSIGNED) DESC LIMIT 1) AS volume_text,
+                    (SELECT po.purchase_order_id FROM purchase_orders po
+                     WHERE po.approval_id = a.approval_id ORDER BY po.purchase_order_seq LIMIT 1) AS purchase_order_id,
+                    (SELECT po.order_quantity FROM purchase_orders po
+                     WHERE po.approval_id = a.approval_id ORDER BY po.purchase_order_seq LIMIT 1) AS order_quantity,
                     a.approval_seq,
                     a.target_stock_snapshot,
                     a.current_stock_snapshot,
@@ -26,7 +39,7 @@ def get_approval_list():
                         FROM approval_status_history AS ash
                         WHERE ash.approval_id = a.approval_id
                         ORDER BY ash.changed_at DESC,
-                                 ash.status_history_id DESC
+                                 CAST(SUBSTRING(ash.status_history_id, 5) AS UNSIGNED) DESC
                         LIMIT 1
                     ) AS approval_status,
 
@@ -39,6 +52,7 @@ def get_approval_list():
 
                 JOIN cosmetics AS c
                     ON a.cosmetic_id = c.cosmetic_id
+                JOIN manufacturers AS m ON m.manufacturer_id = c.manufacturer_id
 
                 LEFT JOIN approval_decisions AS d
                     ON d.decision_id = (
@@ -98,15 +112,17 @@ def decide_approval(
             # 2. 품의 존재 여부 확인 및 잠금
             cursor.execute(
                 """
-                SELECT approval_id
-                FROM approvals
-                WHERE approval_id = %s
+                SELECT a.approval_id, c.manufacturer_id
+                FROM approvals a
+                JOIN cosmetics c ON c.cosmetic_id = a.cosmetic_id
+                WHERE a.approval_id = %s
                 FOR UPDATE
                 """,
                 (approval_id,),
             )
 
-            if cursor.fetchone() is None:
+            approval = cursor.fetchone()
+            if approval is None:
                 raise HTTPException(
                     status_code=404,
                     detail="존재하지 않는 품의입니다.",
@@ -159,22 +175,27 @@ def decide_approval(
 
             decision = pending_rows[0]
 
-            if decision["employee_id"] != data.employee_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="지정된 결재 담당자가 아닙니다.",
-                )
+            if data.decision_status == "APPROVED":
+                if data.manufacturer_id != approval["manufacturer_id"]:
+                    raise HTTPException(status_code=400, detail="해당 상품에 등록된 제조사만 발주처로 선택할 수 있습니다.")
+                cursor.execute("SELECT purchase_order_id FROM purchase_orders WHERE approval_id = %s LIMIT 1", (approval_id,))
+                if cursor.fetchone() is not None:
+                    raise HTTPException(status_code=409, detail="이미 발주가 등록된 품의입니다.")
+                total = Decimal(data.order_quantity) * data.unit_supply_price
+                if total > Decimal("999999999999.99"):
+                    raise HTTPException(status_code=422, detail="총 발주 금액이 허용 범위를 초과합니다.")
 
             # 5. 결재 상태 변경
             cursor.execute(
                 """
                 UPDATE approval_decisions
                 SET decision_status = %s,
+                    employee_id = %s,
                     decided_at = NOW()
                 WHERE decision_id = %s
                   AND decision_status = 'PENDING'
                 """,
-                (data.decision_status, decision["decision_id"]),
+                (data.decision_status, data.employee_id, decision["decision_id"]),
             )
 
             if cursor.rowcount != 1:
@@ -184,27 +205,7 @@ def decide_approval(
                 )
 
             # 6. 상태 이력 ID 생성
-            cursor.execute(
-                """
-                INSERT INTO id_counters (
-                    scope_name,
-                    `last_value`
-                )
-                VALUES (
-                    'history:approval_status_history',
-                    LAST_INSERT_ID(1)
-                )
-                ON DUPLICATE KEY UPDATE
-                    `last_value` =
-                        LAST_INSERT_ID(`last_value` + 1)
-                """
-            )
-
-            cursor.execute(
-                "SELECT LAST_INSERT_ID() AS seq"
-            )
-            seq = cursor.fetchone()["seq"]
-            status_history_id = f"ash_{seq}"
+            status_history_id = _allocate_id(cursor, "history:approval_status_history", "approval_status_history", "status_history_id", "ash_")
 
             # 7. 품의 상태 변경 이력 추가
             cursor.execute(
@@ -224,6 +225,18 @@ def decide_approval(
                 ),
             )
 
+            purchase_order_id = None
+            if data.decision_status == "APPROVED":
+                purchase_order_id = f"{approval_id}_1"
+                cursor.execute(
+                    """INSERT INTO purchase_orders
+                       (purchase_order_id, approval_id, purchase_order_seq, manufacturer_id,
+                        ordered_on, order_quantity, purchase_status, unit_supply_price, order_total_amount)
+                       VALUES (%s, %s, 1, %s, CURDATE(), %s, 'ORDERED', %s, %s)""",
+                    (purchase_order_id, approval_id, data.manufacturer_id,
+                     data.order_quantity, data.unit_supply_price, total),
+                )
+
         conn.commit()
 
         return {
@@ -231,6 +244,7 @@ def decide_approval(
             "decision_id": decision["decision_id"],
             "decision_status": data.decision_status,
             "status_history_id": status_history_id,
+            "purchase_order_id": purchase_order_id,
             "message": "결재 처리가 완료되었습니다.",
         }
 

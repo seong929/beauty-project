@@ -199,8 +199,11 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 TextButton(
                   key: const Key('open-signup'),
@@ -210,7 +213,10 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
                 TextButton(
                   onPressed: isBusy
                       ? null
-                      : () => _showNotice('비밀번호 찾기', '비밀번호 찾기는 준비 중입니다.'),
+                      : () => _showNotice(
+                            '비밀번호 찾기',
+                            '비밀번호 찾기는 준비 중입니다.',
+                          ),
                   child: const Text('비밀번호 찾기'),
                 ),
               ],

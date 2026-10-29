@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:beauty_project/view/customer/login/customer_login_screen.dart';
 
 http.Response responseJson(Object data, [int status = 200]) =>
     http.Response.bytes(
@@ -80,8 +81,13 @@ void main() {
           if (authService != null)
             customerAuthServiceProvider.overrideWithValue(authService),
         ],
-        child: RepaintBoundary(key: captureKey, child: const MyApp()),
-      ),
+        child: RepaintBoundary(
+          key: captureKey,
+          child: const MaterialApp(
+            home: CustomerLoginScreen(),
+          ),
+        ),
+      )
     );
     await tester.pumpAndSettle();
   }

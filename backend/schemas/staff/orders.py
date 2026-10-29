@@ -42,16 +42,11 @@ class OrderCreate(BaseModel):
 class OrderStatusUpdate(BaseModel):
     order_status: OrderStatus = Field(
         description=(
-            "변경할 주문 상태. "
-            "PENDING: 주문 대기, "
-            "PAID: 결제 완료, "
-            "PREPARING: 상품 준비 중, "
-            "SHIPPED: 배송 중, "
-            "DELIVERED: 배송 완료, "
-            "CANCELLED: 주문 취소, "
-            "RETURNED: 반품 완료"
+            "일반 직원 변경 API는 PREPARING만 허용합니다. "
+            "현재 주문 상태가 PAID여야 하며, 나머지 상태 전환은 "
+            "결제·출고·배송·취소·반품 전용 기능에서 처리해야 합니다."
         ),
-        examples=["SHIPPED"]
+        examples=["PREPARING"]
     )
 
 

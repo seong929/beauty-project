@@ -8,11 +8,26 @@ from database import get_connection
 logger = logging.getLogger(__name__)
 
 
+def _inventory_filter_condition(inventory_status: str | None) -> tuple[str, list]:
+    """옵션/화장품별 목록의 SQL EXISTS 내부에서 사용되는 필터."""
+    if inventory_status is None:
+        return "", []
+    if inventory_status == "DISCARD":
+        return "AND pi.inventory_status = %s AND pi.stock_quantity > 0", ["DISCARD"]
+    if inventory_status == "DISCARD_COMPLETED":
+        return "AND pi.inventory_status = %s AND pi.stock_quantity = 0", ["DISCARD"]
+    if inventory_status in ("MAINTAIN", "HOLD"):
+        return "AND pi.inventory_status = %s", [inventory_status]
+    raise HTTPException(status_code=400, detail="유효하지 않은 재고 상태입니다.")
+
+
+
 # 옵션별 중복을 제거한 화장품 목록 조회
 def get_distinct_cosmetics(
     page: int = 1,
     count: int = 20,
-    category_id: str | None = None
+    category_id: str | None = None,
+    inventory_status: str | None = None,
 ):
     if page < 1 or not 1 <= count <= 100:
         raise HTTPException(
@@ -20,6 +35,7 @@ def get_distinct_cosmetics(
             detail="페이지는 1 이상, 조회 개수는 1~100이어야 합니다."
         )
 
+    filter_clause, filter_params = _inventory_filter_condition(inventory_status)
     offset = (page - 1) * count
 
     try:
@@ -45,11 +61,20 @@ def get_distinct_cosmetics(
 
             params = []
 
+            conditions = []
             if category_id is not None:
-                sql += """
-                    WHERE c.category_id = %s
-                """
+                conditions.append("c.category_id = %s")
                 params.append(category_id)
+            if inventory_status is not None:
+                # 페이징 전에 DB에서 걸러야 빈 페이지/누락을 방지합니다.
+                conditions.append(
+                    "EXISTS (SELECT 1 FROM product_inventory pi "
+                    "WHERE pi.cosmetic_id = c.cosmetic_id "
+                    + filter_clause + ")"
+                )
+                params.extend(filter_params)
+            if conditions:
+                sql += " WHERE " + " AND ".join(conditions)
 
             sql += """
                 ORDER BY
@@ -61,7 +86,24 @@ def get_distinct_cosmetics(
             params.extend([count, offset])
 
             cursor.execute(sql, params)
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+            if rows:
+                names = list(dict.fromkeys(row['cosmetic_name'] for row in rows))
+                placeholders = ','.join(['%s'] * len(names))
+                option_sql = f'''SELECT c.cosmetic_id, c.cosmetic_name, cc.category_name
+                                 FROM cosmetics c JOIN categories cc ON cc.category_id=c.category_id
+                                 WHERE c.cosmetic_name IN ({placeholders})'''
+                if inventory_status is not None:
+                    option_sql += ' AND EXISTS (SELECT 1 FROM product_inventory pi WHERE pi.cosmetic_id=c.cosmetic_id ' + filter_clause + ')'
+                option_sql += ' ORDER BY c.manufacturer_id, c.category_id, c.cosmetic_name_seq, c.cosmetic_type_seq'
+                cursor.execute(option_sql, [*names, *filter_params])
+                options = cursor.fetchall()
+                grouped = {}
+                for option in options:
+                    grouped.setdefault((option['cosmetic_name'], option['category_name']), []).append(option['cosmetic_id'])
+                for row in rows:
+                    row['cosmetic_ids'] = grouped.get((row['cosmetic_name'], row['category_name']), [])
+            return rows
 
     except pymysql.MySQLError:
         logger.exception(
@@ -80,12 +122,14 @@ def get_distinct_cosmetics(
         conn.close()
 
 # 특정 화장품 이름에 해당하는 모든 옵션별 상품 조회
-def get_cosmetic_options(cosmetic_name: str):
+def get_cosmetic_options(cosmetic_name: str, inventory_status: str | None = None):
     if not cosmetic_name or not cosmetic_name.strip():
         raise HTTPException(
             status_code=400,
             detail="화장품 이름을 입력해야 합니다."
         )
+
+    filter_clause, filter_params = _inventory_filter_condition(inventory_status)
 
     try:
         conn = get_connection()
@@ -222,10 +266,18 @@ def get_cosmetic_options(cosmetic_name: str):
                     c.cosmetic_type_seq ASC
             """
 
-            cursor.execute(sql, (cosmetic_name,))
+            if inventory_status is not None:
+                # c.cosmetic_name 조건 바로 뒤에서 EXISTS 추가
+                sql = sql.replace(
+                    "WHERE c.cosmetic_name = %s",
+                    "WHERE c.cosmetic_name = %s AND EXISTS ("
+                    "SELECT 1 FROM product_inventory pi "
+                    "WHERE pi.cosmetic_id = c.cosmetic_id " + filter_clause + ")",
+                )
+            cursor.execute(sql, [cosmetic_name, *filter_params])
             rows = cursor.fetchall()
 
-            if not rows:
+            if not rows and inventory_status is None:
                 raise HTTPException(
                     status_code=404,
                     detail="해당 이름의 화장품이 존재하지 않습니다."

@@ -4,6 +4,33 @@ from datetime import date
 from fastapi import HTTPException
 from database import get_connection
 from schemas.admin.cosmetic_schema import CosmeticCreateRequest
+from services.system.automatic_approval_service import _allocate_id
+
+
+def change_sale_status(cosmetic_id: str, employee_id: str, sale_status: str):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT cosmetic_id FROM cosmetics WHERE cosmetic_id = %s FOR UPDATE', (cosmetic_id,))
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail='상품을 찾을 수 없습니다.')
+            cursor.execute('''SELECT sale_status FROM cosmetic_sale_status_history
+                              WHERE cosmetic_id = %s
+                              ORDER BY changed_on DESC, CAST(SUBSTRING(change_id, 5) AS UNSIGNED) DESC LIMIT 1''', (cosmetic_id,))
+            current = cursor.fetchone()
+            if current is None or current['sale_status'] != sale_status:
+                change_id = _allocate_id(cursor, 'history:cosmetic_sale_status_history', 'cosmetic_sale_status_history', 'change_id', 'sls_')
+                cursor.execute('''INSERT INTO cosmetic_sale_status_history
+                                  (change_id, cosmetic_id, employee_id, changed_on, sale_status)
+                                  VALUES (%s, %s, %s, CURDATE(), %s)''',
+                               (change_id, cosmetic_id, employee_id, sale_status))
+        conn.commit()
+        return {'cosmetic_id': cosmetic_id, 'sale_status': sale_status}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 def generate_cosmetic_id(
     cursor,

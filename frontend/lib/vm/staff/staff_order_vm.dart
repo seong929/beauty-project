@@ -1,0 +1,188 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../model/staff/staff_order.dart';
+import '../../model/staff/staff_order_date_range.dart';
+import '../../service/staff/staff_order_service.dart';
+import 'staff_inventory_vm.dart';
+
+const int staffOrderPageSize = 20;
+
+enum StaffOrderScope { active, all, selected }
+
+class StaffOrderFilters {
+  const StaffOrderFilters({
+    this.page = 1,
+    this.ascending = false,
+    this.scope = StaffOrderScope.active,
+    this.selectedStatuses = const {},
+    this.customerId = '',
+    this.startDate,
+    this.endDate,
+  });
+
+  final int page;
+  final bool ascending;
+  final StaffOrderScope scope;
+  final Set<StaffOrderStatus> selectedStatuses;
+  final String customerId;
+  final StaffOrderDateParts? startDate;
+  final StaffOrderDateParts? endDate;
+
+  /// 백엔드가 statuses를 생략하면 '진행 중'을 기본값으로 적용합니다.
+  List<StaffOrderStatus>? get requestedStatuses => switch (scope) {
+    StaffOrderScope.active => null,
+    StaffOrderScope.all => StaffOrderStatus.values,
+    StaffOrderScope.selected => StaffOrderStatus.values
+        .where(selectedStatuses.contains)
+        .toList(),
+  };
+
+  bool get isSelectionEmpty => scope == StaffOrderScope.selected && selectedStatuses.isEmpty;
+
+  StaffOrderFilters copyWith({
+    int? page,
+    bool? ascending,
+    StaffOrderScope? scope,
+    Set<StaffOrderStatus>? selectedStatuses,
+    String? customerId,
+  }) => StaffOrderFilters(
+    page: page ?? this.page,
+    ascending: ascending ?? this.ascending,
+    scope: scope ?? this.scope,
+    selectedStatuses: selectedStatuses ?? this.selectedStatuses,
+    customerId: customerId ?? this.customerId,
+    startDate: startDate,
+    endDate: endDate,
+  );
+
+  StaffOrderQueryKey get queryKey => (
+    page,
+    ascending,
+    scope.name,
+    (requestedStatuses ?? []).map((e) => e.name).join(','),
+    customerId.trim(),
+    startDate?.key,
+    endDate?.key,
+  );
+}
+
+/// 순서대로: 페이지, 정렬, 범위, 상태 CSV, 고객 ID.
+/// record 구조적 동등성 덕분에 동일 조건은 Riverpod 캐시가 재사용됩니다.
+typedef StaffOrderQueryKey = (
+  int, bool, String, String, String, StaffOrderDateKey?, StaffOrderDateKey?
+);
+
+class StaffOrderListVm extends Notifier<StaffOrderFilters> {
+  @override
+  StaffOrderFilters build() => const StaffOrderFilters();
+
+  void setPage(int page) {
+    if (page >= 1) state = state.copyWith(page: page);
+  }
+
+  void setAscending(bool ascending) => state = state.copyWith(
+    ascending: ascending,
+    page: 1,
+  );
+
+  void setScope(StaffOrderScope scope) => state = state.copyWith(
+    scope: scope,
+    page: 1,
+  );
+
+  void toggleStatus(StaffOrderStatus status) {
+    final updated = {...state.selectedStatuses};
+    if (!updated.add(status)) updated.remove(status);
+    state = state.copyWith(selectedStatuses: updated, page: 1);
+  }
+
+  void setCustomerId(String value) => state = state.copyWith(
+    customerId: value.trim(),
+    page: 1,
+  );
+
+  void setDateRange(StaffOrderDateParts? start, StaffOrderDateParts? end) {
+    StaffOrderDateParts.validateRange(start, end);
+    state = StaffOrderFilters(
+      page: 1,
+      ascending: state.ascending,
+      scope: state.scope,
+      selectedStatuses: state.selectedStatuses,
+      customerId: state.customerId,
+      startDate: start,
+      endDate: end,
+    );
+  }
+
+  void reset() => state = const StaffOrderFilters();
+}
+
+final staffOrderListVmProvider =
+    NotifierProvider<StaffOrderListVm, StaffOrderFilters>(StaffOrderListVm.new);
+
+final staffOrderServiceProvider = Provider<StaffOrderService>(
+  (ref) => StaffOrderService(ref.read(staffInventoryServiceProvider)),
+);
+
+final staffOrdersPageProvider = FutureProvider.family<StaffOrderPage, StaffOrderQueryKey>(
+  (ref, key) {
+    final statuses = key.$4.isEmpty
+        ? null
+        : key.$4.split(',').map(StaffOrderStatus.values.byName).toList();
+    return ref.read(staffOrderServiceProvider).getOrders(
+      page: key.$1,
+      count: staffOrderPageSize,
+      asc: key.$2,
+      statuses: statuses,
+      customerId: key.$5.isEmpty ? null : key.$5,
+      startDate: key.$6 == null ? null : StaffOrderDateParts.fromKey(key.$6!),
+      endDate: key.$7 == null ? null : StaffOrderDateParts.fromKey(key.$7!),
+    );
+  },
+);
+
+/// 주문을 선택해야 처음 호출됩니다. 다른 주문 ID는 별도로 캐시됩니다.
+final staffOrderDetailProvider = FutureProvider.family<StaffOrder, String>(
+  (ref, orderId) => ref.read(staffOrderServiceProvider).getOrderDetail(orderId),
+);
+
+/// 상품 목록 펼치기 이전에는 watch하지 않습니다. 닫으면 결과를 재사용합니다.
+final staffOrderItemsProvider = FutureProvider.family<List<StaffOrderItem>, String>(
+  (ref, orderId) => ref.read(staffOrderServiceProvider).getOrderItems(orderId),
+);
+
+/// 주문 상태 갱신은 명시적으로 눌렀을 때만 수행합니다.
+/// 동시 갱신을 막고, 성공 시 상세 및 모든 주문 목록 필터 캐시를 무효화합니다.
+class StaffOrderStatusUpdateVm extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  Future<StaffOrder> updateStatus({
+    required String orderId,
+    required StaffOrderStatus newStatus,
+  }) async {
+    if (state != null) {
+      throw StateError('다른 주문 상태 변경 요청을 처리 중입니다.');
+    }
+    if (newStatus != StaffOrderStatus.PREPARING) {
+      throw StateError('직원이 일반 주문 API로 변경할 수 있는 상태는 PREPARING뿐입니다.');
+    }
+    state = orderId;
+    try {
+      final updated = await ref.read(staffOrderServiceProvider).updateOrderStatus(
+        orderId: orderId,
+        newStatus: newStatus,
+      );
+      ref.invalidate(staffOrderDetailProvider(orderId));
+      ref.invalidate(staffOrdersPageProvider);
+      return updated;
+    } finally {
+      state = null;
+    }
+  }
+}
+
+final staffOrderStatusUpdateVmProvider =
+    NotifierProvider<StaffOrderStatusUpdateVm, String?>(
+  StaffOrderStatusUpdateVm.new,
+);
