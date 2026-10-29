@@ -4,7 +4,7 @@ from schemas.delivery.delivery_schema import DeliveryStatusUpdateRequest
 
 
 # 배송 목록 조회
-def get_delivery_list():
+def get_delivery_list(carrier_id: str):
     conn = get_connection()
 
     try:
@@ -28,12 +28,14 @@ def get_delivery_list():
                 JOIN orders AS o
                     ON d.order_id = o.order_id
 
+                WHERE d.carrier_id = %s
+
                 ORDER BY
                     o.ordered_at DESC,
                     d.delivery_seq DESC
             """
 
-            cursor.execute(sql)
+            cursor.execute(sql, (carrier_id))
             result = cursor.fetchall()
 
         return result
@@ -45,6 +47,7 @@ def get_delivery_list():
 def update_delivery_status(
     delivery_id: str,
     data: DeliveryStatusUpdateRequest,
+    carrier_id: str
 ):
     conn = get_connection()
 
@@ -58,9 +61,10 @@ def update_delivery_status(
                 SELECT order_id, delivery_status
                 FROM delivery_information
                 WHERE delivery_id = %s
+                AND carrier_id = %s
                 FOR UPDATE
                 """,
-                (delivery_id,),
+                (delivery_id, carrier_id),
             )
 
             delivery = cursor.fetchone()
@@ -107,8 +111,9 @@ def update_delivery_status(
                     SET delivery_status = %s,
                         shipped_at = NOW()
                     WHERE delivery_id = %s
+                    AND carrier_id = %s
                     """,
-                    (new_status, delivery_id),
+                    (new_status, delivery_id, carrier_id),
                 )
 
             elif new_status == "DELIVERED":
@@ -118,8 +123,9 @@ def update_delivery_status(
                     SET delivery_status = %s,
                         arrived_at = NOW()
                     WHERE delivery_id = %s
+                    AND carrier_id = %s
                     """,
-                    (new_status, delivery_id),
+                    (new_status, delivery_id, carrier_id),
                 )
 
             else:
@@ -128,8 +134,9 @@ def update_delivery_status(
                     UPDATE delivery_information
                     SET delivery_status = %s
                     WHERE delivery_id = %s
+                    AND carrier_id = %s
                     """,
-                    (new_status, delivery_id),
+                    (new_status, delivery_id, carrier_id),
                 )
 
             if cursor.rowcount != 1:
@@ -142,19 +149,31 @@ def update_delivery_status(
             if new_status == "DELIVERED":
                 cursor.execute(
                     """
-                    UPDATE orders
-                    SET order_status = 'DELIVERED'
+                    SELECT COUNT(*) AS remaining_count
+                    FROM delivery_information
                     WHERE order_id = %s
-                    AND order_status = 'SHIPPED'
+                    AND delivery_status <> 'DELIVERED'
                     """,
                     (order_id,),
                 )
+                remaining_count = cursor.fetchone()["remaining_count"]
 
-                if cursor.rowcount != 1:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="주문 상태를 배송 완료로 변경할 수 없습니다.",
+                if remaining_count == 0:
+                    cursor.execute(
+                        """
+                        UPDATE orders
+                        SET order_status = 'DELIVERED'
+                        WHERE order_id = %s
+                            AND order_status = 'SHIPPED'
+                        """,
+                    (order_id,),
                     )
+
+                    if cursor.rowcount != 1:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="주문 상태를 배송 완료로 변경할 수 없습니다.",
+                        )
 
         # 5. 배송 상태와 주문 상태를 함께 저장
         conn.commit()

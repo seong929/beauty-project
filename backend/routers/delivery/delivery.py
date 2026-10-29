@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from schemas.delivery.delivery_schema import (DeliveryListItem, DeliveryStatusUpdateRequest)
 from services.delivery.delivery_service import (get_delivery_list, update_delivery_status)
+from services.delivery.delivery_auth_service import require_carrier
 
 router = APIRouter(
     prefix="/delivery",
@@ -21,8 +22,12 @@ def delivery_test():
     response_model=list[DeliveryListItem],
     summary="배송 목록 조회"
 )
-def read_delivery_list():
-    return get_delivery_list()
+def read_delivery_list(
+    carrier: dict = Depends(require_carrier)
+):
+    return get_delivery_list(
+        carrier_id=carrier["carrier_id"]
+    )
 
 # 배송 상태 변경
 @router.patch(
@@ -32,5 +37,10 @@ def read_delivery_list():
 def change_delivery_status(
     delivery_id: str,
     data: DeliveryStatusUpdateRequest,
+    carrier: dict = Depends(require_carrier)
 ):
-    return update_delivery_status(delivery_id, data)
+    return update_delivery_status(
+        delivery_id=delivery_id,
+        data=data,
+        carrier_id=carrier["carrier_id"],
+    )
