@@ -4,4 +4,6 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 로컬 에뮬레이터에서 개발 서버의 HTTP 주소에 접근합니다. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

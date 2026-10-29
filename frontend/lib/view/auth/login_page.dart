@@ -1,10 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../vm/auth/auth_notifier.dart';
-import '../admin/approval_page.dart';
-import '../admin/staff_purchase_order_page.dart';
 import 'carrier_login_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -15,11 +12,9 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  final TextEditingController _loginIdController =
-      TextEditingController();
+  final TextEditingController _loginIdController = TextEditingController();
 
-  final TextEditingController _passwordController =
-      TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
 
@@ -35,18 +30,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final password = _passwordController.text;
 
     if (loginId.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('아이디와 비밀번호를 입력해 주세요.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('아이디와 비밀번호를 입력해 주세요.')));
       return;
     }
 
-    final success = await ref.read(authProvider.notifier).login(
-      loginId: loginId,
-      password: password,
-    );
+    final success = await ref
+        .read(authProvider.notifier)
+        .login(loginId: loginId, password: password);
 
     if (!mounted) return;
 
@@ -54,56 +46,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            authState.errorMessage ?? '로그인에 실패했습니다.',
-          ),
-        ),
+        SnackBar(content: Text(authState.errorMessage ?? '로그인에 실패했습니다.')),
       );
       return;
     }
-
-    // 본사 관리자 로그인
-    if (authState.isAdmin) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const ApprovalPage(),
-        ),
-      );
-      return;
-    }
-
-    // 본사 직원 로그인
-    // 입고 등록 화면이 아닌 발주 선택 화면으로 이동
-    if (authState.isStaff) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              const StaffPurchaseOrderPage(),
-        ),
-      );
-      return;
-    }
-
-    // 지원하지 않는 직원 권한
-    ref.read(authProvider.notifier).logout();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('지원하지 않는 사용자 권한입니다.'),
-      ),
-    );
   }
 
-  // 배송업체 로그인 화면으로 이동
   void _goToCarrierLogin() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const CarrierLoginPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const CarrierLoginPage()),
     );
   }
 
@@ -117,9 +69,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: 420,
-            ),
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Card(
               elevation: 3,
               child: Padding(
@@ -127,8 +77,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: Form(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment:
-                        CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Icon(
                         Icons.inventory_2_outlined,
@@ -152,10 +101,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const Text(
                         '본사 직원 · 관리자 로그인',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
                       ),
 
                       const SizedBox(height: 32),
@@ -165,9 +111,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         enabled: !authState.isLoading,
                         decoration: const InputDecoration(
                           labelText: '로그인 아이디',
-                          prefixIcon: Icon(
-                            Icons.person_outline,
-                          ),
+                          prefixIcon: Icon(Icons.person_outline),
                           border: OutlineInputBorder(),
                         ),
                         textInputAction: TextInputAction.next,
@@ -181,9 +125,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
                           labelText: '비밀번호',
-                          prefixIcon: const Icon(
-                            Icons.lock_outline,
-                          ),
+                          prefixIcon: const Icon(Icons.lock_outline),
                           border: const OutlineInputBorder(),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -193,8 +135,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             ),
                             onPressed: () {
                               setState(() {
-                                _obscurePassword =
-                                    !_obscurePassword;
+                                _obscurePassword = !_obscurePassword;
                               });
                             },
                           ),
@@ -207,15 +148,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
 
                       const SizedBox(height: 24),
+                      if (authState.errorMessage != null) ...[
+                        Text(
+                          authState.errorMessage!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       SizedBox(
                         height: 48,
                         child: ElevatedButton(
-                          onPressed:
-                              authState.isLoading ? null : _login,
+                          onPressed: authState.isLoading ? null : _login,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                const Color(0xFF3949AB),
+                            backgroundColor: const Color(0xFF3949AB),
                             foregroundColor: Colors.white,
                           ),
                           child: authState.isLoading
@@ -249,9 +195,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           onPressed: authState.isLoading
                               ? null
                               : _goToCarrierLogin,
-                          icon: const Icon(
-                            Icons.local_shipping_outlined,
-                          ),
+                          icon: const Icon(Icons.local_shipping_outlined),
                           label: const Text(
                             '배송업체 로그인',
                             style: TextStyle(

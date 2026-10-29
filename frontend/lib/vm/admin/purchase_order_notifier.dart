@@ -1,5 +1,7 @@
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../service/api_config.dart';
+import '../auth/api_client_provider.dart';
 
 import '../../model/admin/purchase_order.dart';
 import '../../service/admin/purchase_order_service.dart';
@@ -8,8 +10,9 @@ import 'purchase_order_state.dart';
 
 // 발주 Service Provider
 final purchaseOrderServiceProvider = Provider<PurchaseOrderService>((ref) {
-  return const PurchaseOrderService(
-    baseUrl: 'http://127.0.0.1:8000',
+  return PurchaseOrderService(
+    baseUrl: ApiConfig.baseUrl,
+    client: ref.read(apiClientProvider),
   );
 });
 
@@ -21,27 +24,21 @@ class PurchaseOrderNotifier extends Notifier<PurchaseOrderState> {
 
   // 1. 발주 목록 조회
   Future<void> getPurchaseOrderList() async {
+    if (state.isLoading) return;
     final authState = ref.read(authProvider);
     final employee = authState.employee;
 
     if (!authState.isAdmin || employee == null) {
-      state = state.copyWith(
-        errorMessage: '관리자 로그인이 필요합니다.',
-      );
+      state = state.copyWith(errorMessage: '관리자 로그인이 필요합니다.');
       return;
     }
 
     if (employee.accessToken.isEmpty) {
-      state = state.copyWith(
-        errorMessage: '인증 토큰이 없습니다. 다시 로그인해 주세요.',
-      );
+      state = state.copyWith(errorMessage: '인증 토큰이 없습니다. 다시 로그인해 주세요.');
       return;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
 
     try {
       final service = ref.read(purchaseOrderServiceProvider);
@@ -80,9 +77,7 @@ class PurchaseOrderNotifier extends Notifier<PurchaseOrderState> {
 
   // 2. 발주 선택
   void selectPurchaseOrder(PurchaseOrder purchaseOrder) {
-    state = state.copyWith(
-      selectedPurchaseOrder: purchaseOrder,
-    );
+    state = state.copyWith(selectedPurchaseOrder: purchaseOrder);
   }
 
   // 3. 발주 등록
@@ -99,16 +94,12 @@ class PurchaseOrderNotifier extends Notifier<PurchaseOrderState> {
     final employee = authState.employee;
 
     if (!authState.isAdmin || employee == null) {
-      state = state.copyWith(
-        errorMessage: '관리자 로그인이 필요합니다.',
-      );
+      state = state.copyWith(errorMessage: '관리자 로그인이 필요합니다.');
       return false;
     }
 
     if (employee.accessToken.isEmpty) {
-      state = state.copyWith(
-        errorMessage: '인증 토큰이 없습니다. 다시 로그인해 주세요.',
-      );
+      state = state.copyWith(errorMessage: '인증 토큰이 없습니다. 다시 로그인해 주세요.');
       return false;
     }
 
@@ -116,25 +107,18 @@ class PurchaseOrderNotifier extends Notifier<PurchaseOrderState> {
     if (approvalId.trim().isEmpty ||
         manufacturerId.trim().isEmpty ||
         unitSupplyPrice.trim().isEmpty) {
-      state = state.copyWith(
-        errorMessage: '모든 발주 정보를 입력해 주세요.',
-      );
+      state = state.copyWith(errorMessage: '모든 발주 정보를 입력해 주세요.');
       return false;
     }
 
     final price = num.tryParse(unitSupplyPrice.trim());
 
     if (price == null || !price.isFinite || price <= 0) {
-      state = state.copyWith(
-        errorMessage: '공급 단가는 0보다 큰 숫자여야 합니다.',
-      );
+      state = state.copyWith(errorMessage: '공급 단가는 0보다 큰 숫자여야 합니다.');
       return false;
     }
 
-    state = state.copyWith(
-      isProcessing: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(isProcessing: true, clearErrorMessage: true);
 
     try {
       final service = ref.read(purchaseOrderServiceProvider);
@@ -165,9 +149,7 @@ class PurchaseOrderNotifier extends Notifier<PurchaseOrderState> {
 
       return false;
     } finally {
-      state = state.copyWith(
-        isProcessing: false,
-      );
+      state = state.copyWith(isProcessing: false);
     }
   }
 }

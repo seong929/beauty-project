@@ -1,4 +1,3 @@
-
 import '../../model/admin/outbound.dart';
 
 class OutboundState {
@@ -26,7 +25,7 @@ class OutboundState {
   const OutboundState({
     this.orders = const [],
     this.selectedOrderId,
-    this.selectedCarrierId = 'car_seed_fast',
+    this.selectedCarrierId = '',
     this.isLoading = false,
     this.isProcessing = false,
     this.errorMessage,
@@ -50,8 +49,7 @@ class OutboundState {
       selectedOrderId: clearSelectedOrderId
           ? null
           : (selectedOrderId ?? this.selectedOrderId),
-      selectedCarrierId:
-          selectedCarrierId ?? this.selectedCarrierId,
+      selectedCarrierId: selectedCarrierId ?? this.selectedCarrierId,
       isLoading: isLoading ?? this.isLoading,
       isProcessing: isProcessing ?? this.isProcessing,
       errorMessage: clearErrorMessage

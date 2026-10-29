@@ -1,5 +1,7 @@
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../service/api_config.dart';
+import '../auth/api_client_provider.dart';
 
 import '../../model/admin/inbound.dart';
 import '../../service/admin/inbound_service.dart';
@@ -8,14 +10,14 @@ import 'inbound_state.dart';
 
 // 입고 API Service Provider
 final inboundServiceProvider = Provider<InboundService>((ref) {
-  return const InboundService(
-    baseUrl: 'http://127.0.0.1:8000',
+  return InboundService(
+    baseUrl: ApiConfig.baseUrl,
+    client: ref.read(apiClientProvider),
   );
 });
 
 // 입고 상태 관리 Provider
-final inboundProvider =
-    NotifierProvider<InboundNotifier, InboundState>(
+final inboundProvider = NotifierProvider<InboundNotifier, InboundState>(
   InboundNotifier.new,
 );
 
@@ -55,9 +57,7 @@ class InboundNotifier extends Notifier<InboundState> {
 
       // STAFF와 ADMIN 모두 허용
       if (!authState.isStaff && !authState.isAdmin) {
-        throw Exception(
-          '본사 직원 또는 관리자만 입고 등록할 수 있습니다.',
-        );
+        throw Exception('본사 직원 또는 관리자만 입고 등록할 수 있습니다.');
       }
 
       final accessToken = employee.accessToken;
@@ -94,9 +94,7 @@ class InboundNotifier extends Notifier<InboundState> {
         );
 
         if (expiryDate.isBefore(receivedDate)) {
-          throw Exception(
-            '사용기한은 입고일보다 빠를 수 없습니다.',
-          );
+          throw Exception('사용기한은 입고일보다 빠를 수 없습니다.');
         }
       }
 
@@ -129,10 +127,7 @@ class InboundNotifier extends Notifier<InboundState> {
       // 오류 저장
       state = state.copyWith(
         isProcessing: false,
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
       );
 
       return false;
@@ -141,9 +136,6 @@ class InboundNotifier extends Notifier<InboundState> {
 
   // 입고 결과 및 오류 초기화
   void clearInboundResult() {
-    state = state.copyWith(
-      clearInboundResult: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(clearInboundResult: true, clearErrorMessage: true);
   }
 }

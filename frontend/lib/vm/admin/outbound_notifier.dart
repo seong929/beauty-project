@@ -1,5 +1,7 @@
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../service/api_config.dart';
+import '../auth/api_client_provider.dart';
 
 import '../../service/admin/outbound_service.dart';
 import '../auth/auth_notifier.dart';
@@ -7,8 +9,9 @@ import 'outbound_state.dart';
 
 // 출고 API 서비스 Provider
 final outboundServiceProvider = Provider<OutboundService>((ref) {
-  return const OutboundService(
-    baseUrl: 'http://127.0.0.1:8000',
+  return OutboundService(
+    baseUrl: ApiConfig.baseUrl,
+    client: ref.read(apiClientProvider),
   );
 });
 
@@ -17,8 +20,8 @@ class OutboundNotifier extends Notifier<OutboundState> {
   @override
   OutboundState build() {
     Future.microtask(() {
-    fetchPreparingOrders();
-  });
+      fetchPreparingOrders();
+    });
     return const OutboundState();
   }
 
@@ -30,8 +33,7 @@ class OutboundNotifier extends Notifier<OutboundState> {
       throw Exception('로그인이 필요합니다.');
     }
 
-    if (employee.employeeRole != 'ADMIN' &&
-        employee.employeeRole != 'STAFF') {
+    if (employee.employeeRole != 'ADMIN' && employee.employeeRole != 'STAFF') {
       throw Exception('출고 관리 권한이 없습니다.');
     }
 
@@ -44,17 +46,12 @@ class OutboundNotifier extends Notifier<OutboundState> {
       return;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
 
     try {
       final accessToken = _getAccessToken();
 
-      final outboundService = ref.read(
-        outboundServiceProvider,
-      );
+      final outboundService = ref.read(outboundServiceProvider);
 
       final orders = await outboundService.fetchPreparingOrders(
         accessToken: accessToken,
@@ -74,10 +71,7 @@ class OutboundNotifier extends Notifier<OutboundState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
       );
     }
   }
@@ -130,9 +124,7 @@ class OutboundNotifier extends Notifier<OutboundState> {
     try {
       final accessToken = _getAccessToken();
 
-      final outboundService = ref.read(
-        outboundServiceProvider,
-      );
+      final outboundService = ref.read(outboundServiceProvider);
 
       final result = await outboundService.createOutbound(
         accessToken: accessToken,
@@ -141,9 +133,9 @@ class OutboundNotifier extends Notifier<OutboundState> {
       );
 
       // 출고 성공 후 처리된 주문을 목록에서 제거
-      final updatedOrders = state.orders.where(
-        (order) => order.orderId != orderId,
-      ).toList();
+      final updatedOrders = state.orders
+          .where((order) => order.orderId != orderId)
+          .toList();
 
       state = state.copyWith(
         orders: updatedOrders,
@@ -161,10 +153,7 @@ class OutboundNotifier extends Notifier<OutboundState> {
     } catch (e) {
       state = state.copyWith(
         isProcessing: false,
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
         clearSuccessMessage: true,
       );
 
@@ -174,15 +163,11 @@ class OutboundNotifier extends Notifier<OutboundState> {
 
   // 메시지 초기화
   void clearMessages() {
-    state = state.copyWith(
-      clearErrorMessage: true,
-      clearSuccessMessage: true,
-    );
+    state = state.copyWith(clearErrorMessage: true, clearSuccessMessage: true);
   }
 }
 
 // 출고 상태 Provider
-final outboundProvider =
-    NotifierProvider<OutboundNotifier, OutboundState>(
+final outboundProvider = NotifierProvider<OutboundNotifier, OutboundState>(
   OutboundNotifier.new,
 );

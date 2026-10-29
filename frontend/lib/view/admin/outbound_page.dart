@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,9 +16,7 @@ class OutboundPage extends ConsumerWidget {
     bool isProcessing,
   ) {
     if (orders.isEmpty) {
-      return const Center(
-        child: Text('출고 대기 중인 주문이 없습니다.'),
-      );
+      return const Center(child: Text('출고 대기 중인 주문이 없습니다.'));
     }
 
     return ListView.builder(
@@ -74,8 +71,7 @@ class OutboundPage extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: '새로고침',
-            onPressed: outboundState.isLoading ||
-                    outboundState.isProcessing
+            onPressed: outboundState.isLoading || outboundState.isProcessing
                 ? null
                 : () {
                     outboundNotifier.fetchPreparingOrders();
@@ -86,8 +82,7 @@ class OutboundPage extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          if (outboundState.isLoading)
-            const LinearProgressIndicator(),
+          if (outboundState.isLoading) const LinearProgressIndicator(),
 
           Padding(
             padding: const EdgeInsets.all(16),
@@ -95,17 +90,10 @@ class OutboundPage extends ConsumerWidget {
               children: [
                 const Text(
                   '출고 대상 주문',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
-                Chip(
-                  label: Text(
-                    '${outboundState.preparingCount}건',
-                  ),
-                ),
+                Chip(label: Text('${outboundState.preparingCount}건')),
               ],
             ),
           ),
@@ -135,33 +123,16 @@ class OutboundPage extends ConsumerWidget {
                     ),
                   ),
 
-                DropdownButtonFormField<String>(
+                TextFormField(
                   initialValue: outboundState.selectedCarrierId,
                   decoration: const InputDecoration(
-                    labelText: '배송업체 선택',
+                    labelText: '배송업체 ID',
+                    helperText: '등록된 배송업체의 ID를 입력해 주세요.',
                     border: OutlineInputBorder(),
                   ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'car_seed_fast',
-                      child: Text('샘플 빠른택배'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'car_seed_safe',
-                      child: Text('샘플 안심택배'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'car_seed_post',
-                      child: Text('샘플 우편배송'),
-                    ),
-                  ],
-                  onChanged: outboundState.isProcessing
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            outboundNotifier.selectCarrier(value);
-                          }
-                        },
+                  enabled: !outboundState.isProcessing,
+                  onChanged: (value) =>
+                      outboundNotifier.selectCarrier(value.trim()),
                 ),
 
                 const SizedBox(height: 12),
@@ -169,8 +140,7 @@ class OutboundPage extends ConsumerWidget {
                 ElevatedButton.icon(
                   onPressed: outboundState.canProcessOutbound
                       ? () async {
-                          final confirmed =
-                              await showDialog<bool>(
+                          final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (dialogContext) {
                               return AlertDialog(
@@ -182,19 +152,13 @@ class OutboundPage extends ConsumerWidget {
                                 actions: [
                                   TextButton(
                                     onPressed: () {
-                                      Navigator.pop(
-                                        dialogContext,
-                                        false,
-                                      );
+                                      Navigator.pop(dialogContext, false);
                                     },
                                     child: const Text('취소'),
                                   ),
                                   TextButton(
                                     onPressed: () {
-                                      Navigator.pop(
-                                        dialogContext,
-                                        true,
-                                      );
+                                      Navigator.pop(dialogContext, true);
                                     },
                                     child: const Text('출고'),
                                   ),
@@ -211,27 +175,19 @@ class OutboundPage extends ConsumerWidget {
                           if (!context.mounted) return;
 
                           final message = success
-                              ? ref
-                                  .read(outboundProvider)
-                                  .successMessage
-                              : ref
-                                  .read(outboundProvider)
-                                  .errorMessage;
+                              ? ref.read(outboundProvider).successMessage
+                              : ref.read(outboundProvider).errorMessage;
 
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                message ?? '처리 결과를 확인해 주세요.',
-                              ),
+                              content: Text(message ?? '처리 결과를 확인해 주세요.'),
                             ),
                           );
                         }
                       : null,
                   icon: const Icon(Icons.local_shipping),
                   label: Text(
-                    outboundState.isProcessing
-                        ? '출고 처리 중...'
-                        : '선택한 주문 출고 처리',
+                    outboundState.isProcessing ? '출고 처리 중...' : '선택한 주문 출고 처리',
                   ),
                 ),
 

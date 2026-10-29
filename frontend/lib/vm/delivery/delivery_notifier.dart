@@ -1,5 +1,6 @@
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../service/api_config.dart';
 
 import '../../service/delivery/delivery_service.dart';
 import '../auth/carrier_auth_notifier.dart';
@@ -7,9 +8,7 @@ import 'delivery_state.dart';
 
 // 배송업체 API 서비스 Provider
 final deliveryServiceProvider = Provider<DeliveryService>((ref) {
-  return const DeliveryService(
-    baseUrl: 'http://127.0.0.1:8000',
-  );
+  return DeliveryService(baseUrl: ApiConfig.baseUrl);
 });
 
 // 배송업체 상태 관리 Notifier
@@ -25,11 +24,11 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
     final accessToken = authState.accessToken;
 
     if (accessToken == null || accessToken.isEmpty) {
-    throw Exception('배송업체 로그인이 필요합니다.');
-  }
+      throw Exception('배송업체 로그인이 필요합니다.');
+    }
 
-  return accessToken;
-}
+    return accessToken;
+  }
 
   // 배송 목록 조회
   Future<void> fetchDeliveryList() async {
@@ -37,17 +36,12 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
       return;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
 
     try {
       final accessToken = _getAccessToken();
 
-      final deliveryService = ref.read(
-        deliveryServiceProvider,
-      );
+      final deliveryService = ref.read(deliveryServiceProvider);
 
       final deliveries = await deliveryService.fetchDeliveryList(
         accessToken: accessToken,
@@ -55,8 +49,7 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
 
       // 기존 선택 배송이 목록에 존재하는지 확인
       final selectedDeliveryExists = deliveries.any(
-        (delivery) =>
-            delivery.deliveryId == state.selectedDeliveryId,
+        (delivery) => delivery.deliveryId == state.selectedDeliveryId,
       );
 
       state = state.copyWith(
@@ -68,10 +61,7 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
       );
     }
   }
@@ -95,12 +85,7 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
       return;
     }
 
-    const allowedStatuses = {
-      'ALL',
-      'READY',
-      'IN_TRANSIT',
-      'DELIVERED',
-    };
+    const allowedStatuses = {'ALL', 'READY', 'IN_TRANSIT', 'DELIVERED'};
 
     if (!allowedStatuses.contains(status)) {
       return;
@@ -133,9 +118,7 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
   }
 
   // 배송 상태 변경 공통 처리
-  Future<void> _updateDeliveryStatus(
-    String deliveryStatus,
-  ) async {
+  Future<void> _updateDeliveryStatus(String deliveryStatus) async {
     final selectedDelivery = state.selectedDelivery;
 
     if (selectedDelivery == null || state.isProcessing) {
@@ -153,9 +136,7 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
     try {
       final accessToken = _getAccessToken();
 
-      final deliveryService = ref.read(
-        deliveryServiceProvider,
-      );
+      final deliveryService = ref.read(deliveryServiceProvider);
 
       // PATCH API 호출
       final result = await deliveryService.updateDeliveryStatus(
@@ -187,25 +168,18 @@ class DeliveryNotifier extends Notifier<DeliveryState> {
     } catch (e) {
       state = state.copyWith(
         isProcessing: false,
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
       );
     }
   }
 
   // 성공 및 오류 메시지 초기화
   void clearMessages() {
-    state = state.copyWith(
-      clearSuccessMessage: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(clearSuccessMessage: true, clearErrorMessage: true);
   }
 }
 
 // 배송업체 상태 Provider
-final deliveryProvider =
-    NotifierProvider<DeliveryNotifier, DeliveryState>(
+final deliveryProvider = NotifierProvider<DeliveryNotifier, DeliveryState>(
   DeliveryNotifier.new,
 );

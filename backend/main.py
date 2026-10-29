@@ -1,4 +1,7 @@
+import os
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from routers.admin.approval_router import router as approval_router
 from routers.admin.cosmetic_router import router as cosmetic_router
@@ -29,6 +32,15 @@ app = FastAPI(
     title="온라인 화장품 판매 및 유통 관리 시스템",
     description="자율 팀 프로젝트",
     version="1.0.0",
+)
+
+# Flutter Web의 로컬 개발 주소와 명시적으로 설정된 배포 주소를 허용한다.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(cosmetic_router)

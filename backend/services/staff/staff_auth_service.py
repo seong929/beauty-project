@@ -133,6 +133,35 @@ def require_staff(
     return employee
 
 
+def require_authenticated_staff(
+    employee: dict = Depends(require_staff),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict:
+    """공통 운영 기능에는 임시 세션이 아닌 실제 로그인 토큰이 필요하다."""
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="이 기능에는 실제 로그인 인증이 필요합니다.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return employee
+
+
+def require_admin(
+    employee: dict = Depends(require_authenticated_staff),
+) -> dict:
+    """관리자 전용 기능은 DB에서 확인한 현재 역할을 사용한다."""
+    if employee["employee_role"] != "ADMIN":
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+    return employee
+
+
+def require_matching_employee(employee: dict, employee_id: str) -> None:
+    """요청 본문의 작업자 ID를 로그인한 계정과 일치시킨다."""
+    if employee["employee_id"] != employee_id:
+        raise HTTPException(status_code=403, detail="로그인한 직원 정보가 일치하지 않습니다.")
+
+
 # 백엔드에 이미 있는 pwdlib[argon2] 해시 검증기를 재사용한다.
 from datetime import datetime, timedelta, timezone
 from pwdlib import PasswordHash

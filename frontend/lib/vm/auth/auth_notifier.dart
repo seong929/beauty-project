@@ -1,13 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../service/auth/auth_service.dart';
+import '../../service/api_config.dart';
 import 'auth_state.dart';
 
 // 로그인 API 서비스 Provider
 final authServiceProvider = Provider<AuthService>((ref) {
-  return const AuthService(
-    baseUrl: 'http://127.0.0.1:8000',
-  );
+  return AuthService(baseUrl: ApiConfig.baseUrl);
 });
 
 // 로그인 상태 관리 Notifier
@@ -22,10 +21,7 @@ class AuthNotifier extends Notifier<AuthState> {
     required String loginId,
     required String password,
   }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
 
     try {
       final authService = ref.read(authServiceProvider);
@@ -34,6 +30,11 @@ class AuthNotifier extends Notifier<AuthState> {
         loginId: loginId,
         password: password,
       );
+
+      if (employee.employeeRole != 'ADMIN' &&
+          employee.employeeRole != 'STAFF') {
+        throw Exception('지원하지 않는 사용자 권한입니다.');
+      }
 
       state = state.copyWith(
         employee: employee,
@@ -46,10 +47,7 @@ class AuthNotifier extends Notifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         clearEmployee: true,
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
       );
 
       return false;
@@ -59,6 +57,10 @@ class AuthNotifier extends Notifier<AuthState> {
   // 로그아웃
   void logout() {
     state = const AuthState();
+  }
+
+  void expireSession() {
+    state = const AuthState(errorMessage: '인증이 만료되었습니다. 다시 로그인해 주세요.');
   }
 }
 

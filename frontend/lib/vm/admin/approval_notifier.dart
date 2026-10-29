@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../service/api_config.dart';
+import '../auth/api_client_provider.dart';
+
 import '../../model/admin/approval.dart';
 import '../../service/admin/approval_service.dart';
 import '../auth/auth_notifier.dart';
@@ -7,8 +10,9 @@ import 'approval_state.dart';
 
 // FastAPI 통신 Service
 final approvalServiceProvider = Provider<ApprovalService>((ref) {
-  return const ApprovalService(
-    baseUrl: 'http://127.0.0.1:8000',
+  return ApprovalService(
+    baseUrl: ApiConfig.baseUrl,
+    client: ref.read(apiClientProvider),
   );
 });
 
@@ -21,10 +25,8 @@ class ApprovalNotifier extends Notifier<ApprovalState> {
 
   // 1. 품의 목록 조회
   Future<void> getApprovalList() async {
-    state = state.copyWith(
-      isLoading: true,
-      clearErrorMessage: true,
-    );
+    if (state.isLoading) return;
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
 
     try {
       final service = ref.read(approvalServiceProvider);
@@ -37,18 +39,13 @@ class ApprovalNotifier extends Notifier<ApprovalState> {
         clearSelectedApproval: true,
       );
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
   }
 
   // 2. 품의 선택
   void selectApproval(Approval approval) {
-    state = state.copyWith(
-      selectedApproval: approval,
-    );
+    state = state.copyWith(selectedApproval: approval);
   }
 
   // 3. 품의 승인 및 반려
@@ -66,17 +63,13 @@ class ApprovalNotifier extends Notifier<ApprovalState> {
     final employee = authState.employee;
 
     if (!authState.isAdmin || employee == null) {
-      state = state.copyWith(
-        errorMessage: '관리자 로그인이 필요합니다.',
-      );
+      state = state.copyWith(errorMessage: '관리자 로그인이 필요합니다.');
       return false;
     }
 
     // 로그인한 관리자와 결재 요청자 일치 확인
     if (employee.employeeId != employeeId) {
-      state = state.copyWith(
-        errorMessage: '로그인한 관리자 정보가 일치하지 않습니다.',
-      );
+      state = state.copyWith(errorMessage: '로그인한 관리자 정보가 일치하지 않습니다.');
       return false;
     }
 
@@ -84,16 +77,11 @@ class ApprovalNotifier extends Notifier<ApprovalState> {
     final accessToken = employee.accessToken;
 
     if (accessToken.isEmpty) {
-      state = state.copyWith(
-        errorMessage: '인증 토큰이 없습니다. 다시 로그인해 주세요.',
-      );
+      state = state.copyWith(errorMessage: '인증 토큰이 없습니다. 다시 로그인해 주세요.');
       return false;
     }
 
-    state = state.copyWith(
-      isProcessing: true,
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(isProcessing: true, clearErrorMessage: true);
 
     try {
       final service = ref.read(approvalServiceProvider);
@@ -116,23 +104,17 @@ class ApprovalNotifier extends Notifier<ApprovalState> {
       return true;
     } catch (e) {
       state = state.copyWith(
-        errorMessage: e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
+        errorMessage: e.toString().replaceFirst('Exception: ', ''),
       );
 
       return false;
     } finally {
-      state = state.copyWith(
-        isProcessing: false,
-      );
+      state = state.copyWith(isProcessing: false);
     }
   }
 }
 
 // NotifierProvider
-final approvalProvider =
-    NotifierProvider<ApprovalNotifier, ApprovalState>(
+final approvalProvider = NotifierProvider<ApprovalNotifier, ApprovalState>(
   ApprovalNotifier.new,
 );
