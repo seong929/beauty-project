@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../model/staff/staff_order.dart';
+import '../../model/staff/staff_order_date_range.dart';
 import '../../service/staff/staff_order_service.dart';
 import 'staff_inventory_vm.dart';
 
@@ -15,6 +16,8 @@ class StaffOrderFilters {
     this.scope = StaffOrderScope.active,
     this.selectedStatuses = const {},
     this.customerId = '',
+    this.startDate,
+    this.endDate,
   });
 
   final int page;
@@ -22,6 +25,8 @@ class StaffOrderFilters {
   final StaffOrderScope scope;
   final Set<StaffOrderStatus> selectedStatuses;
   final String customerId;
+  final StaffOrderDateParts? startDate;
+  final StaffOrderDateParts? endDate;
 
   /// 백엔드가 statuses를 생략하면 '진행 중'을 기본값으로 적용합니다.
   List<StaffOrderStatus>? get requestedStatuses => switch (scope) {
@@ -46,6 +51,8 @@ class StaffOrderFilters {
     scope: scope ?? this.scope,
     selectedStatuses: selectedStatuses ?? this.selectedStatuses,
     customerId: customerId ?? this.customerId,
+    startDate: startDate,
+    endDate: endDate,
   );
 
   StaffOrderQueryKey get queryKey => (
@@ -54,12 +61,16 @@ class StaffOrderFilters {
     scope.name,
     (requestedStatuses ?? []).map((e) => e.name).join(','),
     customerId.trim(),
+    startDate?.key,
+    endDate?.key,
   );
 }
 
 /// 순서대로: 페이지, 정렬, 범위, 상태 CSV, 고객 ID.
 /// record 구조적 동등성 덕분에 동일 조건은 Riverpod 캐시가 재사용됩니다.
-typedef StaffOrderQueryKey = (int, bool, String, String, String);
+typedef StaffOrderQueryKey = (
+  int, bool, String, String, String, StaffOrderDateKey?, StaffOrderDateKey?
+);
 
 class StaffOrderListVm extends Notifier<StaffOrderFilters> {
   @override
@@ -90,6 +101,19 @@ class StaffOrderListVm extends Notifier<StaffOrderFilters> {
     page: 1,
   );
 
+  void setDateRange(StaffOrderDateParts? start, StaffOrderDateParts? end) {
+    StaffOrderDateParts.validateRange(start, end);
+    state = StaffOrderFilters(
+      page: 1,
+      ascending: state.ascending,
+      scope: state.scope,
+      selectedStatuses: state.selectedStatuses,
+      customerId: state.customerId,
+      startDate: start,
+      endDate: end,
+    );
+  }
+
   void reset() => state = const StaffOrderFilters();
 }
 
@@ -111,6 +135,8 @@ final staffOrdersPageProvider = FutureProvider.family<StaffOrderPage, StaffOrder
       asc: key.$2,
       statuses: statuses,
       customerId: key.$5.isEmpty ? null : key.$5,
+      startDate: key.$6 == null ? null : StaffOrderDateParts.fromKey(key.$6!),
+      endDate: key.$7 == null ? null : StaffOrderDateParts.fromKey(key.$7!),
     );
   },
 );

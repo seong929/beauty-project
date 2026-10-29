@@ -1,4 +1,5 @@
 import '../../model/staff/staff_order.dart';
+import '../../model/staff/staff_order_date_range.dart';
 import 'staff_inventory_service.dart';
 
 /// 주문 도메인의 HTTP 응답 파싱만 담당합니다.
@@ -13,11 +14,15 @@ class StaffOrderService {
     bool asc = false,
     List<StaffOrderStatus>? statuses,
     String? customerId,
+    StaffOrderDateParts? startDate,
+    StaffOrderDateParts? endDate,
   }) async {
     final query = <String, dynamic>{
       'page': '$page',
       'count': '$count',
       'asc': '$asc',
+      if (startDate != null) ...startDate.toQuery('start'),
+      if (endDate != null) ...endDate.toQuery('end'),
       if (statuses != null && statuses.isNotEmpty)
         'statuses': statuses.map((s) => s.name).toList(),
       if (customerId != null && customerId.trim().isNotEmpty)

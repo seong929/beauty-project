@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../model/staff/staff_order.dart';
+import '../../model/staff/staff_order_date_range.dart';
 import '../../vm/staff/staff_order_vm.dart';
 import 'staff_order_detail_view.dart';
 
@@ -15,16 +17,79 @@ class StaffOrderView extends ConsumerStatefulWidget {
 
 class _StaffOrderViewState extends ConsumerState<StaffOrderView> {
   final TextEditingController _customerInput = TextEditingController();
+  final List<TextEditingController> _starts = List.generate(5, (_) => TextEditingController());
+  final List<TextEditingController> _ends = List.generate(5, (_) => TextEditingController());
 
   @override
   void dispose() {
     _customerInput.dispose();
+    for (final c in [..._starts, ..._ends]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   void _applyCustomerSearch() {
     ref.read(staffOrderListVmProvider.notifier).setCustomerId(_customerInput.text);
     FocusScope.of(context).unfocus();
+  }
+
+  void _applyDateSearch() {
+    try {
+      final start = StaffOrderDateParts.parseFields(
+        _starts.map((c) => c.text).toList(), '시작',
+      );
+      final end = StaffOrderDateParts.parseFields(
+        _ends.map((c) => c.text).toList(), '종료',
+      );
+      StaffOrderDateParts.validateRange(start, end);
+      ref.read(staffOrderListVmProvider.notifier).setDateRange(start, end);
+      FocusScope.of(context).unfocus();
+    } on FormatException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    }
+  }
+
+  void _clearDateSearch() {
+    for (final c in [..._starts, ..._ends]) {
+      c.clear();
+    }
+    ref.read(staffOrderListVmProvider.notifier).setDateRange(null, null);
+    FocusScope.of(context).unfocus();
+  }
+
+  Widget _dateInputs(List<TextEditingController> controllers, String title, bool tablet) {
+    const names = ['연', '월', '일', '시', '분'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: List.generate(5, (i) => SizedBox(
+            width: i == 0 ? (tablet ? 100 : 84) : (tablet ? 76 : 63),
+            child: TextField(
+              controller: controllers[i],
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(i == 0 ? 4 : 2)],
+              textInputAction: i == 4 ? TextInputAction.done : TextInputAction.next,
+              onSubmitted: i == 4 ? (_) => _applyDateSearch() : null,
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: names[i],
+                hintText: i == 0 ? '2026' : '—',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          )),
+        ),
+      ],
+    );
   }
 
   void _openOrder(String orderId) {
@@ -64,6 +129,10 @@ class _StaffOrderViewState extends ConsumerState<StaffOrderView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 10),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: tablet ? 355 : 285),
+                  child: SingleChildScrollView(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 _OrderSearchBar(
                   customerInput: _customerInput,
                   onSearch: _applyCustomerSearch,
@@ -122,6 +191,50 @@ class _StaffOrderViewState extends ConsumerState<StaffOrderView> {
                     ],
                   ),
                 ],
+                const SizedBox(height: 6),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  initiallyExpanded: filters.startDate != null || filters.endDate != null,
+                  leading: const Icon(Icons.date_range_outlined),
+                  title: Text(
+                    filters.startDate == null && filters.endDate == null
+                        ? '주문 일시 범위 (전체 기간)'
+                        : '주문 일시: ${filters.startDate?.label ?? '처음'} ~ ${filters.endDate?.label ?? '끝'}',
+                  ),
+                  subtitle: const Text('연·월·일·시·분 순서로 입력 · 끝 단위까지 포함'),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _dateInputs(_starts, '시작 시각 (이상)', tablet),
+                          const SizedBox(height: 12),
+                          _dateInputs(_ends, '종료 시각 (해당 단위 전체 포함)', tablet),
+                          const SizedBox(height: 10),
+                          Wrap(spacing: 8, runSpacing: 6, children: [
+                            FilledButton.icon(
+                              onPressed: _applyDateSearch,
+                              icon: const Icon(Icons.search),
+                              label: const Text('기간 조회'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _clearDateSearch,
+                              icon: const Icon(Icons.clear),
+                              label: const Text('기간 초기화'),
+                            ),
+                          ]),
+                          const SizedBox(height: 6),
+                          Text('예: 2026/9 ~ 2026/10, 2026/9/20 10:30 ~ 2026/9/25 14:45',
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                ]),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [

@@ -1,5 +1,6 @@
 import logging
 import pymysql
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from database import get_connection
@@ -13,7 +14,9 @@ def get_available_order_list_from_page(
     count: int,
     asc: bool,
     statuses: list[str] | None = None,
-    customer_id: str | None = None
+    customer_id: str | None = None,
+    start_at: datetime | None = None,
+    end_before: datetime | None = None,
 ):
     if page < 1:
         raise HTTPException(
@@ -77,6 +80,15 @@ def get_available_order_list_from_page(
             if customer_id is not None:
                 conditions.append("customer_id = %s")
                 params.append(customer_id)
+
+            # 반열림 구간 [start_at, end_before)으로 경계를 정확하게 표현합니다.
+            # 파라미터 바인딩을 사용하여 SQL 인젝션을 방지합니다.
+            if start_at is not None:
+                conditions.append("ordered_at >= %s")
+                params.append(start_at)
+            if end_before is not None:
+                conditions.append("ordered_at < %s")
+                params.append(end_before)
 
             where_clause = " AND ".join(conditions)
 
