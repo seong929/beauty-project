@@ -23,6 +23,13 @@ router = APIRouter(
     dependencies=[Depends(require_staff)]
 )
 
+class InventoryFilterStatus(str, Enum):
+    MAINTAIN = "MAINTAIN"
+    HOLD = "HOLD"
+    DISCARD = "DISCARD"
+    DISCARD_COMPLETED = "DISCARD_COMPLETED"
+
+
 class InventoryOrderBy(str, Enum):
     RECEIVED_ON = "received_on"
     EXPIRES_ON = "expires_on"
@@ -38,7 +45,8 @@ class InventoryOrderBy(str, Enum):
     - `inventory_status`: 재고 상태
       - MAINTAIN: 유지
       - HOLD: 보류
-      - DISCARD: 폐기
+      - DISCARD: 폐기 대기 (수량 >= 1)
+      - DISCARD_COMPLETED: 폐기 완료 (수량 = 0)
     - `sale_option`: 판매 옵션
       - NORMAL: 일반
       - NEAR_EXPIRY: 사용기한 임박
@@ -77,7 +85,7 @@ def get_inventory_by_cosmetic_id(
         )
     ],
     inventory_status: Annotated[
-        InventoryStatus | None,
+        InventoryFilterStatus | None,
         Query(description="재고 상태 필터 (생략 시 전체)")
     ] = None,
     sale_option: Annotated[
@@ -127,12 +135,12 @@ def get_inventory_by_cosmetic_id(
     "/inventory/by-status",
     summary="상태별 재고 분류 및 필터 조회",
     description=(
-        "MAINTAIN, HOLD, DISCARD 상태별 재고 수량을 "
+        "MAINTAIN, HOLD, DISCARD(수량>0), DISCARD_COMPLETED(수량=0) 상태별 재고 수량을 "
         "집계하고 조건에 맞는 재고 목록을 반환합니다."
     )
 )
 def get_inventory_grouped_by_status(
-    inventory_status: InventoryStatus | None = Query(
+    inventory_status: InventoryFilterStatus | None = Query(
         default=None,
         description="조회할 재고 상태"
     ),

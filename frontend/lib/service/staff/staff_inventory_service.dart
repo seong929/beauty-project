@@ -330,10 +330,12 @@ class StaffInventoryService {
   Future<List<RootCosmetics>> getDistinctCosmeticsPage({
     required int page,
     int count = 20,
+    String? inventoryStatus,
   }) async {
     final rows = _rows(await _get('/staff/cosmetics/distinct', {
       'page': '$page',
       'count': '$count',
+      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
     }));
     return rows.map((json) => RootCosmetics(
       name: _requiredString(json, 'cosmetic_name'),
@@ -346,9 +348,13 @@ class StaffInventoryService {
       getDistinctCosmeticsPage(page: 1);
 
   /// 화장품 행을 펼친 순간에만 요청합니다.
-  Future<List<OptionCosmetics>> getCosmeticOptions(String cosmeticName) async {
+  Future<List<OptionCosmetics>> getCosmeticOptions(
+    String cosmeticName, {String? inventoryStatus,
+  }) async {
     final encodedName = Uri.encodeComponent(cosmeticName);
-    final rows = _rows(await _get('/staff/cosmetics/$encodedName/options'));
+    final rows = _rows(await _get('/staff/cosmetics/$encodedName/options', {
+      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
+    }));
     return rows.map((json) => OptionCosmetics(
           cosmeticId: _requiredString(json, 'cosmetic_id'),
           manufactureerId: _requiredString(json, 'manufacturer_id'),
@@ -363,10 +369,12 @@ class StaffInventoryService {
 
   /// 옵션 행을 펼친 순간에만 요청합니다.
   Future<List<StaffProductInventory>> getInventoryByCosmeticId(
-    String cosmeticId,
-  ) async {
+    String cosmeticId, {String? inventoryStatus,
+  }) async {
     final encodedId = Uri.encodeComponent(cosmeticId);
-    final rows = _rows(await _get('/staff/cosmetics/$encodedId/inventory'));
+    final rows = _rows(await _get('/staff/cosmetics/$encodedId/inventory', {
+      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
+    }));
     return rows.map(_inventoryFromJson).toList();
   }
 
@@ -393,11 +401,13 @@ class StaffInventoryService {
     int page = 1,
     int count = 20,
     bool descending = true,
+    String? inventoryStatus,
   }) async {
     final response = await _get('/staff/inventory/by-status', {
       'page': '$page',
       'count': '$count',
       'descending': '$descending',
+      if (inventoryStatus != null) 'inventory_status': inventoryStatus,
     });
     if (response is! Map) {
       throw const StaffInventoryApiException('상태별 재고 API 응답이 객체 형식이 아닙니다.');
@@ -407,11 +417,11 @@ class StaffInventoryService {
     if (rawSummary is! Map) {
       throw const StaffInventoryApiException('상태별 재고 API 응답에 summary가 없습니다.');
     }
-    final summary = <InventoryStatus, InventoryStatusSummary>{};
-    for (final status in InventoryStatus.values) {
-      final item = rawSummary[status.name];
+    final summary = <String, InventoryStatusSummary>{};
+    for (final status in const ['MAINTAIN', 'HOLD', 'DISCARD', 'DISCARD_COMPLETED']) {
+      final item = rawSummary[status];
       if (item is! Map) {
-        throw StaffInventoryApiException('상태별 집계값 ${status.name} 형식이 올바르지 않습니다.');
+        throw StaffInventoryApiException('상태별 집계값 $status 형식이 올바르지 않습니다.');
       }
       summary[status] = InventoryStatusSummary(
         inventoryCount: _asInt(item['inventory_count']),

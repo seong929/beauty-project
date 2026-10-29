@@ -1,6 +1,40 @@
 import 'staff_product_inventory.dart';
 
-/// /staff/inventory/by-status 의 상태별 집계(건수 / 수량).
+/// DB Enum 상태를 변경하지 않고 DISCARD 재고를 수량에 따라 구분하는 검색 필터.
+enum InventoryDisplayFilter {
+  all,
+  maintain,
+  hold,
+  discard,
+  discardCompleted;
+
+  String? get apiValue => switch (this) {
+    InventoryDisplayFilter.all => null,
+    InventoryDisplayFilter.maintain => 'MAINTAIN',
+    InventoryDisplayFilter.hold => 'HOLD',
+    InventoryDisplayFilter.discard => 'DISCARD',
+    InventoryDisplayFilter.discardCompleted => 'DISCARD_COMPLETED',
+  };
+
+  String get label => switch (this) {
+    InventoryDisplayFilter.all => '전체 재고',
+    InventoryDisplayFilter.maintain => '정상 유지',
+    InventoryDisplayFilter.hold => '보류',
+    InventoryDisplayFilter.discard => '폐기 대상 (1개 이상)',
+    InventoryDisplayFilter.discardCompleted => '폐기 완료 (0개)',
+  };
+
+  static InventoryDisplayFilter forBatch(StaffProductInventory batch) =>
+      switch (batch.inventoryStatus) {
+        InventoryStatus.MAINTAIN => InventoryDisplayFilter.maintain,
+        InventoryStatus.HOLD => InventoryDisplayFilter.hold,
+        InventoryStatus.DISCARD => batch.stockQuantity == 0
+            ? InventoryDisplayFilter.discardCompleted
+            : InventoryDisplayFilter.discard,
+      };
+}
+
+/// 서버 상태별 집계(건수 및 수량)
 class InventoryStatusSummary {
   const InventoryStatusSummary({
     required this.inventoryCount,
@@ -11,7 +45,6 @@ class InventoryStatusSummary {
   final int totalQuantity;
 }
 
-/// 백엔드의 전체 상태별 조회 결과.
 class InventoryStatusOverview {
   const InventoryStatusOverview({
     required this.summary,
@@ -23,10 +56,9 @@ class InventoryStatusOverview {
     required this.totalPages,
   });
 
-  final Map<InventoryStatus, InventoryStatusSummary> summary;
+  /// 키: MAINTAIN, HOLD, DISCARD, DISCARD_COMPLETED
+  final Map<String, InventoryStatusSummary> summary;
   final List<StaffProductInventory> inventories;
-
-  /// cosmetic_id -> cosmetics.cosmetic_name, 상태별 목록의 표시 제목.
   final Map<String, String> cosmeticNames;
   final int page;
   final int pageSize;

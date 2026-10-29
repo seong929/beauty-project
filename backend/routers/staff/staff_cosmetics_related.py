@@ -2,6 +2,7 @@
 import logging
 
 from typing import Annotated
+from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 
 import services.staff.staff_cosmetics_service as staff_cosmetics_service
@@ -14,6 +15,13 @@ router = APIRouter(
     tags=["직원-화장품"],
     dependencies=[Depends(require_staff)]
 )
+
+
+class InventoryFilterStatus(str, Enum):
+    MAINTAIN = "MAINTAIN"
+    HOLD = "HOLD"
+    DISCARD = "DISCARD"
+    DISCARD_COMPLETED = "DISCARD_COMPLETED"
 
 
 # 옵션별 중복을 제거한 화장품 목록 조회
@@ -68,13 +76,17 @@ def get_distinct_cosmetics(
             min_length=1,
             description="조회할 카테고리 ID (생략 시 전체 조회)"
         )
-    ] = None
+    ] = None,
+    inventory_status: InventoryFilterStatus | None = Query(
+        default=None, description="재고 상태 필터: DISCARD는 수량>0, DISCARD_COMPLETED는 수량=0"
+    ),
 ):
     try:
         return staff_cosmetics_service.get_distinct_cosmetics(
             page=page,
             count=count,
-            category_id=category_id
+            category_id=category_id,
+            inventory_status=inventory_status.value if inventory_status else None,
         )
 
     except HTTPException:
@@ -126,11 +138,15 @@ def get_cosmetic_options(
             min_length=1,
             description="옵션 목록을 조회할 화장품 이름"
         )
-    ]
+    ],
+    inventory_status: InventoryFilterStatus | None = Query(
+        default=None, description="옵션에 해당 상태 재고가 존재하는 경우에만 반환"
+    ),
 ):
     try:
         return staff_cosmetics_service.get_cosmetic_options(
-            cosmetic_name=cosmetic_name
+            cosmetic_name=cosmetic_name,
+            inventory_status=inventory_status.value if inventory_status else None,
         )
 
     except HTTPException:

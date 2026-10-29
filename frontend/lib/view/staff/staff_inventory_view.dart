@@ -48,6 +48,7 @@ class StaffInventoryView extends ConsumerWidget {
     final mode = ref.watch(staffInventoryDisplayProvider);
     final statusMode = mode == StaffInventoryDisplayMode.status;
     final descending = ref.watch(staffInventoryStatusDescendingProvider);
+    final selectedFilter = ref.watch(staffInventoryFilterProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -81,9 +82,44 @@ class StaffInventoryView extends ConsumerWidget {
         ],
       ),
       // 두 페이지의 provider는 선택된 모드에서만 watch됩니다.
-      body: statusMode
-          ? const _StatusInventoryPage()
-          : const _CosmeticsInventoryPage(),
+      body: Column(
+        children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(isTablet ? 32 : 12, 10, isTablet ? 32 : 12, 6),
+                child: DropdownButtonFormField<InventoryDisplayFilter>(
+                  key: ValueKey('inventory-filter-${selectedFilter.name}'),
+                  value: selectedFilter,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: '재고 상태 필터',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.filter_list),
+                    isDense: true,
+                  ),
+                  items: InventoryDisplayFilter.values.map((filter) =>
+                    DropdownMenuItem(value: filter, child: Text(filter.label)),
+                  ).toList(),
+                  onChanged: (value) {
+                    if (value == null || value == selectedFilter) return;
+                    ref.read(staffInventoryFilterProvider.notifier).setFilter(value);
+                    ref.read(staffCosmeticsPageProvider.notifier).reset();
+                    ref.read(staffStatusPageProvider.notifier).reset();
+                    ref.read(inventoryExpansionProvider.notifier).clear();
+                  },
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: statusMode
+                ? const _StatusInventoryPage()
+                : const _CosmeticsInventoryPage(),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -94,16 +130,19 @@ class _CosmeticsInventoryPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final page = ref.watch(staffCosmeticsPageProvider);
-    final result = ref.watch(distinctCosmeticsPageProvider(page));
+    final filter = ref.watch(staffInventoryFilterProvider);
+    final query = (page, filter);
+    final result = ref.watch(distinctCosmeticsPageProvider(query));
     return result.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => _Failed(
         message: '화장품 목록을 불러오지 못했습니다.\n$error',
-        onRetry: () => ref.invalidate(distinctCosmeticsPageProvider(page)),
+        onRetry: () => ref.invalidate(distinctCosmeticsPageProvider(query)),
       ),
       data: (cosmetics) {
         if (cosmetics.isEmpty && page == 1) {
-          return const Center(child: Text('보유중인 화장품이 없습니다'));
+          return Center(child: Text(filter == InventoryDisplayFilter.all
+              ? '보유중인 화장품이 없습니다' : '해당 상태의 재고가 있는 화장품이 없습니다')); 
         }
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -115,7 +154,7 @@ class _CosmeticsInventoryPage extends ConsumerWidget {
                 constraints: const BoxConstraints(maxWidth: StaffInventoryView._maxContentWidth),
                 child: Scrollbar(
                   child: ListView.separated(
-                    key: ValueKey('cosmetics-page-$page'),
+                    key: ValueKey('cosmetics-page-$page-${filter.name}'),
                     padding: EdgeInsets.fromLTRB(
                       horizontal,
                       vertical,
@@ -314,7 +353,9 @@ class _OptionsBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final result = ref.watch(cosmeticOptionsProvider(cosmeticName));
+    final filter = ref.watch(staffInventoryFilterProvider);
+    final query = (cosmeticName, filter);
+    final result = ref.watch(cosmeticOptionsProvider(query));
     final theme = Theme.of(context);
 
     return Container(
@@ -329,7 +370,7 @@ class _OptionsBody extends ConsumerWidget {
         loading: () => const _LoadingRow(),
         error: (error, stack) => _Failed(
           message: '옵션 조회 실패\n$error',
-          onRetry: () => ref.invalidate(cosmeticOptionsProvider(cosmeticName)),
+          onRetry: () => ref.invalidate(cosmeticOptionsProvider(query)),
         ),
         data: (options) => options.isEmpty
             ? const _EmptyRow('보유중인 옵션이 없습니다')
@@ -495,7 +536,9 @@ class _InventoryBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final result = ref.watch(cosmeticInventoryProvider(cosmeticId));
+    final filter = ref.watch(staffInventoryFilterProvider);
+    final query = (cosmeticId, filter);
+    final result = ref.watch(cosmeticInventoryProvider(query));
     final theme = Theme.of(context);
     return Container(
       width: double.infinity,
@@ -510,7 +553,7 @@ class _InventoryBody extends ConsumerWidget {
         loading: () => const _LoadingRow(),
         error: (error, stack) => _Failed(
           message: '재고 조회 실패\n$error',
-          onRetry: () => ref.invalidate(cosmeticInventoryProvider(cosmeticId)),
+          onRetry: () => ref.invalidate(cosmeticInventoryProvider(query)),
         ),
         data: (inventory) => inventory.isEmpty
             ? const _EmptyRow('보유중인 재고가 없습니다')
@@ -540,21 +583,17 @@ class _InventoryBody extends ConsumerWidget {
                             ? await _openInventoryDiscard(context, batch, cosmeticName)
                             : await _openInventoryHistory(context, batch.inventoryId);
                         if (changed == true && context.mounted) {
-                          ref.invalidate(cosmeticInventoryProvider(cosmeticId));
-                          ref.invalidate(inventoryStatusOverviewProvider((
-                            ref.read(staffStatusPageProvider),
-                            ref.read(staffInventoryStatusDescendingProvider),
-                          )));
+                          invalidateStaffInventoryLists(ref);
+                          ref.read(staffCosmeticsPageProvider.notifier).reset();
+                          ref.read(staffStatusPageProvider.notifier).reset();
                         }
                       },
                       onHistoryTap: () async {
                         final changed = await _openInventoryHistory(context, inventory[i].inventoryId);
                         if (changed == true && context.mounted) {
-                          ref.invalidate(cosmeticInventoryProvider(cosmeticId));
-                          ref.invalidate(inventoryStatusOverviewProvider((
-                            ref.read(staffStatusPageProvider),
-                            ref.read(staffInventoryStatusDescendingProvider),
-                          )));
+                          invalidateStaffInventoryLists(ref);
+                          ref.read(staffCosmeticsPageProvider.notifier).reset();
+                          ref.read(staffStatusPageProvider.notifier).reset();
                         }
                       },
                     ),
@@ -601,7 +640,7 @@ class _InventoryRow extends StatelessWidget {
                   Text('$id · $quantity', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 5),
                   Text(
-                    '${batch.inventoryStatus.name} / ${batch.saleOption.name}\n'
+                    '${InventoryDisplayFilter.forBatch(batch).label} / ${batch.saleOption.name}\n'
                     '입고 ${_date(batch.receivedOn)} · 만료 ${_date(batch.expiresOn)}',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
@@ -631,7 +670,7 @@ class _InventoryRow extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(flex: 2, child: _InfoCell(label: '수량', value: quantity)),
           const SizedBox(width: 12),
-          Expanded(flex: 3, child: _InfoCell(label: '상태', value: '${batch.inventoryStatus.name} / ${batch.saleOption.name}')),
+          Expanded(flex: 3, child: _InfoCell(label: '상태', value: '${InventoryDisplayFilter.forBatch(batch).label} / ${batch.saleOption.name}')),
           const SizedBox(width: 12),
           Expanded(flex: 3, child: _InfoCell(label: '입고일', value: _date(batch.receivedOn))),
           const SizedBox(width: 12),
@@ -658,7 +697,8 @@ class _StatusInventoryPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final descending = ref.watch(staffInventoryStatusDescendingProvider);
     final page = ref.watch(staffStatusPageProvider);
-    final lookup = (page, descending);
+    final filter = ref.watch(staffInventoryFilterProvider);
+    final lookup = (page, descending, filter);
     final result = ref.watch(inventoryStatusOverviewProvider(lookup));
 
     return result.when(
@@ -670,20 +710,22 @@ class _StatusInventoryPage extends ConsumerWidget {
       data: (overview) => LayoutBuilder(
         builder: (context, constraints) {
           final tablet = constraints.maxWidth >= StaffInventoryView._tabletBreakpoint;
-          final statuses = <InventoryStatus>[
-            InventoryStatus.DISCARD,
-            InventoryStatus.HOLD,
-            InventoryStatus.MAINTAIN,
+          final statuses = <InventoryDisplayFilter>[
+            InventoryDisplayFilter.discard,
+            InventoryDisplayFilter.hold,
+            InventoryDisplayFilter.maintain,
+            InventoryDisplayFilter.discardCompleted,
           ];
-          final orderedStatuses =
-              descending ? statuses : statuses.reversed.toList();
+          final orderedStatuses = filter == InventoryDisplayFilter.all
+              ? (descending ? statuses : statuses.reversed.toList())
+              : <InventoryDisplayFilter>[filter];
 
           // API 측 정렬과 무관하게 상태 그룹 순서를 명확히 보장합니다.
-          final byStatus = <InventoryStatus, List<StaffProductInventory>>{
+          final byStatus = <InventoryDisplayFilter, List<StaffProductInventory>>{
             for (final status in orderedStatuses) status: <StaffProductInventory>[],
           };
           for (final item in overview.inventories) {
-            byStatus[item.inventoryStatus]?.add(item);
+            byStatus[InventoryDisplayFilter.forBatch(item)]?.add(item);
           }
 
           // 위젯은 ListView.builder에서 화면에 보이는 항목만 생성합니다.
@@ -697,7 +739,7 @@ class _StatusInventoryPage extends ConsumerWidget {
             }
           }
           if (overview.inventories.isEmpty) {
-            entries.add(const _EmptyStatusGroup(InventoryStatus.DISCARD));
+            entries.add(_EmptyStatusGroup(filter));
           }
           entries.add('pager');
 
@@ -711,7 +753,7 @@ class _StatusInventoryPage extends ConsumerWidget {
                     await ref.read(inventoryStatusOverviewProvider(lookup).future);
                   },
                   child: ListView.builder(
-                    key: ValueKey('status-page-$page-$descending'),
+                    key: ValueKey('status-page-$page-$descending-${filter.name}'),
                     padding: EdgeInsets.fromLTRB(
                       tablet ? 32 : 12,
                       tablet ? 24 : 12,
@@ -737,10 +779,10 @@ class _StatusInventoryPage extends ConsumerWidget {
                           isTablet: tablet,
                         );
                       }
-                      if (entry is InventoryStatus) {
+                      if (entry is InventoryDisplayFilter) {
                         return _StatusGroupHeader(
                           status: entry,
-                          summary: overview.summary[entry]!,
+                          summary: overview.summary[entry.apiValue]!,
                           isTablet: tablet,
                         );
                       }
@@ -768,15 +810,17 @@ class _StatusInventoryPage extends ConsumerWidget {
                                   )
                                 : await _openInventoryHistory(context, batch.inventoryId);
                             if (changed == true && context.mounted) {
-                              ref.invalidate(inventoryStatusOverviewProvider(lookup));
-                              ref.invalidate(cosmeticInventoryProvider(batch.cosmeticId));
+                              invalidateStaffInventoryLists(ref);
+                              ref.read(staffCosmeticsPageProvider.notifier).reset();
+                              ref.read(staffStatusPageProvider.notifier).reset();
                             }
                           },
                           onHistoryTap: () async {
                             final changed = await _openInventoryHistory(context, batch.inventoryId);
                             if (changed == true && context.mounted) {
-                              ref.invalidate(inventoryStatusOverviewProvider(lookup));
-                              ref.invalidate(cosmeticInventoryProvider(batch.cosmeticId));
+                              invalidateStaffInventoryLists(ref);
+                              ref.read(staffCosmeticsPageProvider.notifier).reset();
+                              ref.read(staffStatusPageProvider.notifier).reset();
                             }
                           },
                         ),
@@ -795,21 +839,19 @@ class _StatusInventoryPage extends ConsumerWidget {
 
 class _EmptyStatusGroup {
   const _EmptyStatusGroup(this.status);
-  final InventoryStatus status;
+  final InventoryDisplayFilter status;
 }
 
-String _statusKorean(InventoryStatus status) => switch (status) {
-  InventoryStatus.DISCARD => '폐기 대상',
-  InventoryStatus.HOLD => '보류',
-  InventoryStatus.MAINTAIN => '정상 유지',
-};
+String _statusKorean(InventoryDisplayFilter status) => status.label;
 
-Color _statusColor(BuildContext context, InventoryStatus status) {
+Color _statusColor(BuildContext context, InventoryDisplayFilter status) {
   final theme = Theme.of(context).colorScheme;
   return switch (status) {
-    InventoryStatus.DISCARD => theme.error,
-    InventoryStatus.HOLD => const Color(0xFF996300),
-    InventoryStatus.MAINTAIN => theme.primary,
+    InventoryDisplayFilter.discard => theme.error,
+    InventoryDisplayFilter.discardCompleted => theme.outline,
+    InventoryDisplayFilter.hold => const Color(0xFF996300),
+    InventoryDisplayFilter.maintain => theme.primary,
+    InventoryDisplayFilter.all => theme.primary,
   };
 }
 
@@ -827,7 +869,8 @@ class _StatusOverviewHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final discard = overview.summary[InventoryStatus.DISCARD]!;
+    final discard = overview.summary['DISCARD']!;
+    final completed = overview.summary['DISCARD_COMPLETED']!;
     return Padding(
       padding: EdgeInsets.only(bottom: isTablet ? 20 : 12),
       child: Column(
@@ -843,7 +886,7 @@ class _StatusOverviewHeader extends StatelessWidget {
                 fontSize: isTablet ? 22 : 18,
               )),
               Text(
-                descending ? '기본 정렬: 폐기 → 보류 → 유지' : '정렬: 유지 → 보류 → 폐기',
+                descending ? '정렬: 폐기 대상 → 보류 → 유지 → 폐기 완료' : '정렬: 폐기 완료 → 유지 → 보류 → 폐기 대상',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -857,7 +900,7 @@ class _StatusOverviewHeader extends StatelessWidget {
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
-                  '폐기 대상: ${_formatNumber(discard.inventoryCount)}건 · ${_formatNumber(discard.totalQuantity)}개',
+                  '폐기 대상: ${_formatNumber(discard.inventoryCount)}건 · ${_formatNumber(discard.totalQuantity)}개  |  폐기 완료: ${_formatNumber(completed.inventoryCount)}건',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.error,
                     fontWeight: FontWeight.w700,
@@ -879,7 +922,7 @@ class _StatusGroupHeader extends StatelessWidget {
     required this.isTablet,
   });
 
-  final InventoryStatus status;
+  final InventoryDisplayFilter status;
   final InventoryStatusSummary summary;
   final bool isTablet;
 
@@ -904,7 +947,7 @@ class _StatusGroupHeader extends StatelessWidget {
               runSpacing: 3,
               children: [
                 Text(
-                  '${status.name} · ${_statusKorean(status)}',
+                  '${status.apiValue} · ${_statusKorean(status)}',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: color,
                     fontWeight: FontWeight.w700,
@@ -948,7 +991,7 @@ class _StatusInventoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _statusColor(context, batch.inventoryStatus);
+    final color = _statusColor(context, InventoryDisplayFilter.forBatch(batch));
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -1007,7 +1050,7 @@ class _StatusInventoryCard extends StatelessWidget {
                   Text('옵션 ID: ${batch.cosmeticId}',
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 4),
-                  Text('재고 ${batch.inventoryId} · ${_formatNumber(batch.stockQuantity)}개',
+                  Text('재고 ${batch.inventoryId} · ${_formatNumber(batch.stockQuantity)}개 · ${InventoryDisplayFilter.forBatch(batch).label}',
                       style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),
                   if (onTap != null)

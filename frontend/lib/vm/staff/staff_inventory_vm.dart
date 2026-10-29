@@ -34,22 +34,26 @@ final staffStatusPageProvider = NotifierProvider<InventoryPageVm, int>(
 );
 
 final distinctCosmeticsPageProvider =
-    FutureProvider.family<List<RootCosmetics>, int>((ref, page) {
+    FutureProvider.family<List<RootCosmetics>, (int, InventoryDisplayFilter)>((ref, args) {
   return ref.read(staffInventoryServiceProvider).getDistinctCosmeticsPage(
-    page: page, count: inventoryPageSize,
+    page: args.$1, count: inventoryPageSize, inventoryStatus: args.$2.apiValue,
   );
 });
 
 /// 화장품 행을 펼친 시점에만 옵션 목록을 조회합니다.
 final cosmeticOptionsProvider =
-    FutureProvider.family<List<OptionCosmetics>, String>((ref, name) {
-  return ref.read(staffInventoryServiceProvider).getCosmeticOptions(name);
+    FutureProvider.family<List<OptionCosmetics>, (String, InventoryDisplayFilter)>((ref, args) {
+  return ref.read(staffInventoryServiceProvider).getCosmeticOptions(
+    args.$1, inventoryStatus: args.$2.apiValue,
+  );
 });
 
 /// 옵션 행을 펼친 시점에만 해당 옵션의 재고를 조회합니다.
 final cosmeticInventoryProvider =
-    FutureProvider.family<List<StaffProductInventory>, String>((ref, id) {
-  return ref.read(staffInventoryServiceProvider).getInventoryByCosmeticId(id);
+    FutureProvider.family<List<StaffProductInventory>, (String, InventoryDisplayFilter)>((ref, args) {
+  return ref.read(staffInventoryServiceProvider).getInventoryByCosmeticId(
+    args.$1, inventoryStatus: args.$2.apiValue,
+  );
 });
 
 /// Riverpod 3.x: StateNotifier 대신 Notifier를 사용합니다.
@@ -57,6 +61,8 @@ final cosmeticInventoryProvider =
 class InventoryExpansionVm extends Notifier<Set<String>> {
   @override
   Set<String> build() => <String>{};
+
+  void clear() => state = <String>{};
 
   void toggle(String key) {
     final next = <String>{...state};
@@ -72,14 +78,36 @@ final inventoryExpansionProvider =
   InventoryExpansionVm.new,
 );
 
+/// 두 표시 모드가 같은 선택을 공유하도록 단일 Notifier로 관리합니다.
+class InventoryFilterVm extends Notifier<InventoryDisplayFilter> {
+  @override
+  InventoryDisplayFilter build() => InventoryDisplayFilter.all;
+
+  void setFilter(InventoryDisplayFilter value) => state = value;
+}
+
+final staffInventoryFilterProvider =
+    NotifierProvider<InventoryFilterVm, InventoryDisplayFilter>(
+  InventoryFilterVm.new,
+);
+
+/// 폐기 및 세부 갱신 후 모든 필터·페이지 캐시를 다시 평가합니다.
+void invalidateStaffInventoryLists(WidgetRef ref) {
+  ref.invalidate(distinctCosmeticsPageProvider);
+  ref.invalidate(cosmeticOptionsProvider);
+  ref.invalidate(cosmeticInventoryProvider);
+  ref.invalidate(inventoryStatusOverviewProvider);
+}
+
 
 /// 상태별 전체 재고는 해당 표시 모드로 진입할 때에만 요청합니다.
 final inventoryStatusOverviewProvider =
-    FutureProvider.family<InventoryStatusOverview, (int, bool)>((ref, args) {
+    FutureProvider.family<InventoryStatusOverview, (int, bool, InventoryDisplayFilter)>((ref, args) {
   return ref.read(staffInventoryServiceProvider).getInventoryGroupedByStatus(
     page: args.$1,
     count: inventoryPageSize,
     descending: args.$2,
+    inventoryStatus: args.$3.apiValue,
   );
 });
 

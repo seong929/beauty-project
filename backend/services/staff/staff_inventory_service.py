@@ -6,6 +6,21 @@ from fastapi import HTTPException
 from database import get_connection
 
 logger = logging.getLogger(__name__)
+# UI 검색용 가상 상태. DB inventory_status ENUM에는 추가하지 않습니다.
+INVENTORY_FILTER_STATUSES = {"MAINTAIN", "HOLD", "DISCARD", "DISCARD_COMPLETED"}
+
+
+def _status_filter_clause(alias: str, inventory_status: str | None) -> tuple[str, list]:
+    if inventory_status is None:
+        return "", []
+    if inventory_status not in INVENTORY_FILTER_STATUSES:
+        raise HTTPException(status_code=400, detail="유효하지 않은 재고 상태입니다.")
+    if inventory_status == "DISCARD":
+        return f"{alias}.inventory_status = %s AND {alias}.stock_quantity > 0", ["DISCARD"]
+    if inventory_status == "DISCARD_COMPLETED":
+        return f"{alias}.inventory_status = %s AND {alias}.stock_quantity = 0", ["DISCARD"]
+    return f"{alias}.inventory_status = %s", [inventory_status]
+
 
 
 def get_inventory_by_cosmetic_id(
@@ -21,7 +36,7 @@ def get_inventory_by_cosmetic_id(
             detail="화장품 ID를 입력해야 합니다."
         )
 
-    allowed_statuses = {"MAINTAIN", "HOLD", "DISCARD"}
+    allowed_statuses = INVENTORY_FILTER_STATUSES
     allowed_sale_options = {"NORMAL", "NEAR_EXPIRY"}
     allowed_order_columns = {"received_on", "expires_on"}
 
@@ -76,9 +91,10 @@ def get_inventory_by_cosmetic_id(
 
             params = [cosmetic_id]
 
-            if inventory_status is not None:
-                sql += " AND pi.inventory_status = %s"
-                params.append(inventory_status)
+            status_sql, status_params = _status_filter_clause("pi", inventory_status)
+            if status_sql:
+                sql += " AND " + status_sql
+                params.extend(status_params)
 
             if sale_option is not None:
                 sql += " AND pi.sale_option = %s"
@@ -129,7 +145,7 @@ def get_inventory_grouped_by_status(
     전체 재고를 Python 메모리로 가져오지 않고 MySQL LIMIT/OFFSET으로 제한한다.
     기본 DESC 우선순위: DISCARD -> HOLD -> MAINTAIN.
     """
-    if inventory_status not in (None, "MAINTAIN", "HOLD", "DISCARD"):
+    if inventory_status is not None and inventory_status not in INVENTORY_FILTER_STATUSES:
         raise HTTPException(status_code=400, detail="유효하지 않은 재고 상태입니다.")
     if sale_option not in (None, "NORMAL", "NEAR_EXPIRY"):
         raise HTTPException(status_code=400, detail="유효하지 않은 판매 옵션입니다.")
@@ -149,15 +165,19 @@ def get_inventory_grouped_by_status(
     where = " WHERE " + " AND ".join(conditions) if conditions else ""
     list_conditions = conditions.copy()
     list_params = params.copy()
-    if inventory_status is not None:
-        list_conditions.append("pi.inventory_status = %s")
-        list_params.append(inventory_status)
+    status_sql, status_params = _status_filter_clause("pi", inventory_status)
+    if status_sql:
+        list_conditions.append(status_sql)
+        list_params.extend(status_params)
     list_where = " WHERE " + " AND ".join(list_conditions) if list_conditions else ""
     # 전체 집계는 상태 필터와 무관하게 출력해 그룹별 총량을 보여준다.
     # 같은 base filter는 유지한다.
-    order_case = ("CASE pi.inventory_status "
-                  "WHEN 'DISCARD' THEN 0 WHEN 'HOLD' THEN 1 "
-                  "WHEN 'MAINTAIN' THEN 2 ELSE 3 END")
+    order_case = ("CASE "
+                  "WHEN pi.inventory_status='DISCARD' AND pi.stock_quantity > 0 THEN 0 "
+                  "WHEN pi.inventory_status='HOLD' THEN 1 "
+                  "WHEN pi.inventory_status='MAINTAIN' THEN 2 "
+                  "WHEN pi.inventory_status='DISCARD' AND pi.stock_quantity = 0 THEN 3 "
+                  "ELSE 4 END")
     order_direction = "ASC" if descending else "DESC"
     offset = (page - 1) * count
 
@@ -170,10 +190,13 @@ def get_inventory_grouped_by_status(
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT pi.inventory_status, COUNT(*) AS inventory_count, "
+                "SELECT CASE WHEN pi.inventory_status='DISCARD' "
+                "AND pi.stock_quantity=0 THEN 'DISCARD_COMPLETED' "
+                "ELSE pi.inventory_status END AS filter_status, "
+                "COUNT(*) AS inventory_count, "
                 "COALESCE(SUM(pi.stock_quantity), 0) AS total_quantity "
                 "FROM product_inventory pi" + where +
-                " GROUP BY pi.inventory_status", params,
+                " GROUP BY filter_status", params,
             )
             summary_rows = cursor.fetchall()
             cursor.execute(
@@ -196,10 +219,10 @@ def get_inventory_grouped_by_status(
 
         summary = {
             state: {"inventory_count": 0, "total_quantity": 0}
-            for state in ("MAINTAIN", "HOLD", "DISCARD")
+            for state in ("MAINTAIN", "HOLD", "DISCARD", "DISCARD_COMPLETED")
         }
         for row in summary_rows:
-            summary[row["inventory_status"]] = {
+            summary[row["filter_status"]] = {
                 "inventory_count": int(row["inventory_count"]),
                 "total_quantity": int(row["total_quantity"]),
             }
