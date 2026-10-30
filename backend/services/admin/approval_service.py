@@ -20,6 +20,9 @@ def get_approval_list():
                     m.manufacturer_name,
                     c.category_id,
                     c.cosmetic_name_seq,
+                    (SELECT h.unit_cost FROM cosmetic_cost_history h
+                     WHERE h.cosmetic_id = c.cosmetic_id
+                     ORDER BY h.changed_on DESC, CAST(SUBSTRING(h.change_id, 5) AS UNSIGNED) DESC LIMIT 1) AS unit_cost,
                     (SELECT v.volume_text FROM cosmetic_volume_history v
                      WHERE v.cosmetic_id = c.cosmetic_id
                      ORDER BY v.changed_on DESC, CAST(SUBSTRING(v.change_id, 5) AS UNSIGNED) DESC LIMIT 1) AS volume_text,

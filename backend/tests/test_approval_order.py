@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from main import app
@@ -10,6 +11,24 @@ from schemas.admin.approval_schema import ApprovalDecisionRequest
 from services.admin import approval_service
 from services.staff import staff_auth_service
 from services.system import automatic_approval_service
+from routers.admin import approval_router
+
+
+class ApprovalListCostTests(unittest.TestCase):
+    def test_list_includes_decimal_cost_and_supports_missing_history(self):
+        app = FastAPI()
+        app.include_router(approval_router.router)
+        app.dependency_overrides[approval_router.require_admin] = lambda: {"employee_role": "ADMIN"}
+        row = {
+            "approval_id": "a1", "cosmetic_id": "c1", "cosmetic_name": "Cream",
+            "approval_seq": 1, "target_stock_snapshot": 100, "current_stock_snapshot": 20,
+            "requested_quantity": 80, "approval_content": "Low stock", "requested_on": "2026-10-30",
+        }
+        for cost in (Decimal("500.25"), None):
+            with self.subTest(cost=cost), patch.object(approval_router, "get_approval_list", return_value=[{**row, "unit_cost": cost}]):
+                response = TestClient(app).get("/admin/approvals")
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()[0]["unit_cost"], "500.25" if cost is not None else None)
 
 
 class ApprovalOrderTests(unittest.TestCase):
