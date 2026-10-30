@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,20 +8,15 @@ class CarrierLoginPage extends ConsumerStatefulWidget {
   const CarrierLoginPage({super.key});
 
   @override
-  ConsumerState<CarrierLoginPage> createState() =>
-      _CarrierLoginPageState();
+  ConsumerState<CarrierLoginPage> createState() => _CarrierLoginPageState();
 }
 
-class _CarrierLoginPageState
-    extends ConsumerState<CarrierLoginPage> {
-  final TextEditingController _loginIdController =
-      TextEditingController();
+class _CarrierLoginPageState extends ConsumerState<CarrierLoginPage> {
+  final TextEditingController _loginIdController = TextEditingController();
 
-  final TextEditingController _passwordController =
-      TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
-  final GlobalKey<FormState> _formKey =
-      GlobalKey<FormState>();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   bool _obscurePassword = true;
 
@@ -52,20 +46,15 @@ class _CarrierLoginPageState
     if (success) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => const DeliveryPage(),
-        ),
+        MaterialPageRoute(builder: (context) => const DeliveryPage()),
       );
     } else {
       final errorMessage =
-          ref.read(carrierAuthProvider).errorMessage ??
-              '로그인에 실패했습니다.';
+          ref.read(carrierAuthProvider).errorMessage ?? '로그인에 실패했습니다.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errorMessage)));
     }
   }
 
@@ -76,24 +65,24 @@ class _CarrierLoginPageState
     return Scaffold(
       appBar: AppBar(
         title: const Text('배송업체 로그인'),
-        leading: Navigator.of(context).canPop() ? IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: '직원·관리자 로그인으로 돌아가기',
-          onPressed: authState.isLoading
-              ? null
-              : () {
-              Navigator.pop(context);
-          },
-        ) : null,
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: '직원·관리자 로그인으로 돌아가기',
+                onPressed: authState.isLoading
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                      },
+              )
+            : null,
       ),
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF5F7F6),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: 420,
-            ),
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Card(
               elevation: 3,
               shape: RoundedRectangleBorder(
@@ -105,8 +94,7 @@ class _CarrierLoginPageState
                   key: _formKey,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment:
-                        CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Icon(
                         Icons.local_shipping_outlined,
@@ -130,9 +118,7 @@ class _CarrierLoginPageState
                       const Text(
                         '배송업체 담당자 계정으로 로그인하세요.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey,
-                        ),
+                        style: TextStyle(color: Colors.grey),
                       ),
 
                       const SizedBox(height: 32),
@@ -143,13 +129,11 @@ class _CarrierLoginPageState
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                           labelText: '아이디',
-                          prefixIcon:
-                              Icon(Icons.person_outline),
+                          prefixIcon: Icon(Icons.person_outline),
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value == null ||
-                              value.trim().isEmpty) {
+                          if (value == null || value.trim().isEmpty) {
                             return '아이디를 입력해 주세요.';
                           }
                           return null;
@@ -170,14 +154,12 @@ class _CarrierLoginPageState
                         },
                         decoration: InputDecoration(
                           labelText: '비밀번호',
-                          prefixIcon:
-                              const Icon(Icons.lock_outline),
+                          prefixIcon: const Icon(Icons.lock_outline),
                           border: const OutlineInputBorder(),
                           suffixIcon: IconButton(
                             onPressed: () {
                               setState(() {
-                                _obscurePassword =
-                                    !_obscurePassword;
+                                _obscurePassword = !_obscurePassword;
                               });
                             },
                             icon: Icon(
@@ -201,22 +183,18 @@ class _CarrierLoginPageState
                       SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                          onPressed:
-                              authState.isLoading ? null : _login,
+                          onPressed: authState.isLoading ? null : _login,
                           child: authState.isLoading
                               ? const SizedBox(
                                   width: 22,
                                   height: 22,
-                                  child:
-                                      CircularProgressIndicator(
+                                  child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                   ),
                                 )
                               : const Text(
                                   '로그인',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                  ),
+                                  style: TextStyle(fontSize: 16),
                                 ),
                         ),
                       ),
