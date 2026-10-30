@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'app/bootstrap.dart';
 import 'view/auth/carrier_login_page.dart';
+import 'view/operations/operations_theme.dart';
 
 Future<void> main() => launchApp(
-  const MaterialApp(
+  MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: CarrierLoginPage(),
+    theme: operationsTheme(),
+    home: const CarrierLoginPage(),
   ),
 );
 

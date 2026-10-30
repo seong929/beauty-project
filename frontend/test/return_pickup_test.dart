@@ -135,7 +135,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('ret_1'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Seoul'), findsOneWidget);
+    // The collection address is visible in both the summary and selected details.
+    expect(find.textContaining('Seoul'), findsNWidgets(2));
     expect(find.byType(FilledButton), findsOneWidget);
   });
 }
