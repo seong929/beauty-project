@@ -52,9 +52,9 @@ class ReturnInspectionRequest(BaseModel):
 
 
 class ReturnRefundStatusRequest(BaseModel):
-    """내부 환불 업무 상태만 변경한다. 외부 환불 완료는 지원하지 않는다."""
+    """내부 환불 업무 상태를 기록한다. 외부 결제 취소는 수행하지 않는다."""
 
     model_config = ConfigDict(extra="forbid")
     employee_id: str = Field(min_length=1, max_length=48)
     expected_refund_status: Literal["PENDING", "PROCESSING", "FAILED"]
-    refund_status: Literal["PROCESSING", "FAILED"]
+    refund_status: Literal["PROCESSING", "FAILED", "COMPLETED"]

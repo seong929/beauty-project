@@ -182,8 +182,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('완료').last);
     await tester.pumpAndSettle();
-    expect(find.text('반품 R1 · REQUESTED'), findsNothing);
-    expect(find.text('반품 R2 · COMPLETED'), findsOneWidget);
+    expect(find.text('R1'), findsNothing);
+    expect(find.text('R2'), findsOneWidget);
   });
 
   testWidgets('상품 등록은 카테고리 이름 목록을 사용한다', (tester) async {

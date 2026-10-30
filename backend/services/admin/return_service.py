@@ -95,7 +95,7 @@ def decide_return(
 
 # 내부 환불 업무 상태 변경 (외부 결제 취소 미지원)
 def update_return_refund_status(return_id: str, data: ReturnRefundStatusRequest):
-    """관리자 내부 업무 접수/실패 기록. 결제 취소나 실제 금액 반환을 수행하지 않는다."""
+    """관리자 내부 업무 접수/실패/완료 기록. 결제 취소나 실제 금액 반환을 수행하지 않는다."""
     conn = get_connection()
     try:
         conn.begin()
@@ -128,7 +128,7 @@ def update_return_refund_status(return_id: str, data: ReturnRefundStatusRequest)
             current = request["refund_status"]
             allowed = {
                 "PENDING": {"PROCESSING"},
-                "PROCESSING": {"FAILED"},
+                "PROCESSING": {"FAILED", "COMPLETED"},
                 "FAILED": {"PROCESSING"},
                 "COMPLETED": set(),
             }

@@ -267,7 +267,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('반품 ret_1 · ${server.status}'));
+    await tester.tap(find.text('ret_1'));
     await tester.pumpAndSettle();
   }
 
@@ -291,10 +291,10 @@ void main() {
       expect(server.refund, 'PROCESSING');
       // A reload may recreate the expanded detail; reopen if necessary.
       if (find.text('내부 환불 처리 실패 기록').evaluate().isEmpty) {
-        await tester.tap(find.text('반품 ret_1 · COMPLETED'));
+        await tester.tap(find.text('ret_1'));
         await tester.pumpAndSettle();
       }
-      expect(find.textContaining('환불 처리 중 (내부 접수)'), findsOneWidget);
+      expect(find.textContaining('환불: 환불 처리 중 (내부 접수)'), findsOneWidget);
       expect(find.text('내부 환불 처리 실패 기록'), findsOneWidget);
       expect(find.text('내부 환불 처리 접수'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -308,11 +308,53 @@ void main() {
     await pumpPage(tester, server);
     expect(find.text('내부 환불 처리 접수'), findsNothing);
     expect(find.text('검수 완료'), findsOneWidget);
+    expect(find.text('환불 완료 기록'), findsNothing);
+  });
+
+  testWidgets('processing refund can be completed after confirmation', (
+    tester,
+  ) async {
+    final server = _Server()..refund = 'PROCESSING';
+    await pumpPage(tester, server);
+    await tester.ensureVisible(find.text('환불 완료 기록'));
+    await tester.tap(find.text('환불 완료 기록'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('다시 변경할 수 없습니다.'), findsOneWidget);
+    await tester.tap(find.text('취소'));
+    await tester.pumpAndSettle();
+    expect(server.writes, 0);
+    await tester.tap(find.text('환불 완료 기록'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('확인'));
+    await tester.pumpAndSettle();
+    expect(server.lastBody, {
+      'employee_id': 'emp_admin',
+      'expected_refund_status': 'PROCESSING',
+      'refund_status': 'COMPLETED',
+    });
+    expect(server.writes, 1);
+    expect(server.reads, 2);
+    expect(server.refund, 'COMPLETED');
+    expect(find.text('ret_1'), findsOneWidget);
+    expect(find.text('환불 완료 · 수거 완료 · 주문 ord_1 · 수량 1'), findsOneWidget);
+    if (find.textContaining('환불: 환불 완료').evaluate().isEmpty) {
+      await tester.tap(find.text('ret_1'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.textContaining('환불: 환불 완료'), findsOneWidget);
+    expect(find.textContaining('반품 ID: ret_1'), findsOneWidget);
+    expect(find.textContaining('고객: cus_1'), findsOneWidget);
+    expect(find.textContaining('주문 상품: oi_1'), findsOneWidget);
+    expect(find.textContaining('본사 수령일: 2026-10-30'), findsOneWidget);
+    expect(find.text('환불 완료 기록'), findsNothing);
+    expect(find.text('내부 환불 처리 실패 기록'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('staff cannot see refund actions', (tester) async {
-    await pumpPage(tester, _Server(), staff: true);
+    await pumpPage(tester, _Server()..refund = 'PROCESSING', staff: true);
     expect(find.text('내부 환불 처리 접수'), findsNothing);
+    expect(find.text('환불 완료 기록'), findsNothing);
   });
 
   testWidgets('failed internal task offers retry; completed offers no action', (
@@ -326,7 +368,7 @@ void main() {
     await tester.tap(find.byTooltip('새로고침'));
     await tester.pumpAndSettle();
     if (find.textContaining('환불: 환불 완료').evaluate().isEmpty) {
-      await tester.tap(find.text('반품 ret_1 · COMPLETED'));
+      await tester.tap(find.text('ret_1'));
       await tester.pumpAndSettle();
     }
     expect(find.textContaining('환불: 환불 완료'), findsOneWidget);

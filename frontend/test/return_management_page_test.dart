@@ -30,7 +30,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('반품 R1 · REQUESTED'));
+    await tester.tap(find.text('R1'));
     await tester.pumpAndSettle();
     expect(find.text('승인'), findsOneWidget);
     expect(find.text('반려'), findsOneWidget);

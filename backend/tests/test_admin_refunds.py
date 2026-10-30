@@ -76,6 +76,16 @@ class AdminRefundTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["previous_refund_status"], current)
 
+    def test_complete_processing_refund_commits_internal_status(self):
+        self.row["refund_status"] = "PROCESSING"
+        self.cursor.fetchone.side_effect = [self.employee, self.row]
+        response = self.update(expected_refund_status="PROCESSING", refund_status="COMPLETED")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["refund_status"], "COMPLETED")
+        self.assertFalse(response.json()["external_refund_performed"])
+        self.assertEqual(self.cursor.execute.call_args.args[1], ("COMPLETED", "ret_test", "PROCESSING"))
+        self.conn.commit.assert_called_once()
+
     def test_uninspected_or_inconsistent_return_rejected(self):
         for field, value in [
             ("return_status", "REQUESTED"), ("return_status", "APPROVED"),
@@ -96,14 +106,17 @@ class AdminRefundTests(unittest.TestCase):
             ("FAILED", "PENDING", "PROCESSING"),
             ("PENDING", "PENDING", "FAILED"),
             ("COMPLETED", "FAILED", "PROCESSING"),
+            ("PENDING", "PENDING", "COMPLETED"),
+            ("FAILED", "FAILED", "COMPLETED"),
+            ("COMPLETED", "PROCESSING", "COMPLETED"),
+            ("PROCESSING", "PENDING", "COMPLETED"),
         ]:
             with self.subTest(current=current, expected=expected):
                 self.cursor.fetchone.side_effect = [self.employee, {**self.row, "refund_status": current}]
                 self.assertEqual(self.update(expected_refund_status=expected, refund_status=target).status_code, 409)
         self.conn.commit.assert_not_called()
 
-    def test_external_completion_and_unknown_fields_not_accepted(self):
-        self.assertEqual(self.update(refund_status="COMPLETED").status_code, 422)
+    def test_unknown_status_and_fields_not_accepted(self):
         self.assertEqual(self.update(refund_status="PENDING").status_code, 422)
         self.assertEqual(self.update(external_refund_performed=True).status_code, 422)
         self.conn.cursor.assert_not_called()
