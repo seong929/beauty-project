@@ -49,8 +49,8 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
                         entry.deliveryId == item!.deliveryId,
                   )
                   .firstOrNull);
-    final purchaseIds = selected == null
-        ? <String>[]
+    final purchaseItems = selected == null
+        ? <CustomerOrderLine>[]
         : current.items
               .where(
                 (entry) =>
@@ -59,13 +59,45 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
                     entry.unitPrice == selected.unitPrice &&
                     entry.deliveryId == selected.deliveryId,
               )
-              .map((entry) => entry.id)
               .toList();
+    final purchaseIds = purchaseItems.map((entry) => entry.id).toList();
     final shipments = ref.watch(deliveryRecordsProvider(current.id));
     final returns = ref.watch(customerReturnsProvider(null));
-    final canReturn =
+    final eligible =
         selected != null &&
         const {'SHIPPED', 'DELIVERED', 'RETURNED'}.contains(current.status);
+    final quantitiesReady =
+        returns.hasValue &&
+        !returns.isLoading &&
+        !returns.hasError &&
+        !response.isLoading &&
+        !response.hasError;
+    final available = purchaseItems.fold<int>(
+      0,
+      (sum, entry) =>
+          sum +
+          remainingReturnQuantity(item: entry, requests: returns.value ?? []),
+    );
+    final returnableItems = purchaseItems
+        .where(
+          (entry) =>
+              remainingReturnQuantity(
+                item: entry,
+                requests: returns.value ?? [],
+              ) >
+              0,
+        )
+        .toList();
+    final canReturn = eligible && quantitiesReady && available > 0;
+    final buttonLabel = !eligible
+        ? '배송 후 반품 신청 가능'
+        : returns.isLoading || response.isLoading
+        ? '반품 가능 수량 확인 중'
+        : !quantitiesReady
+        ? '반품 내역 확인 필요'
+        : available == 0
+        ? '반품 가능 수량 없음'
+        : '반품 신청';
     final times =
         shipments.value
             ?.map((entry) => entry.updatedAt)
@@ -80,6 +112,14 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('구매 상세'),
         actions: [
+          IconButton(
+            tooltip: '구매 상세 새로고침',
+            onPressed: () {
+              ref.invalidate(customerOrdersProvider);
+              ref.invalidate(customerReturnsProvider(null));
+            },
+            icon: const Icon(Icons.refresh),
+          ),
           TextButton(
             onPressed: () => showCustomerPreviewCart(context),
             child: const Text('장바구니'),
@@ -89,6 +129,11 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (eligible && quantitiesReady)
+            Text(
+              '반품 가능 수량 $available개',
+              key: const Key('order-detail-return-quantity'),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
             child: SizedBox(
@@ -100,12 +145,12 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
                         MaterialPageRoute(
                           builder: (_) => CustomerReturnRequestScreen(
                             order: current,
-                            item: selected,
+                            item: returnableItems.first,
                           ),
                         ),
                       )
                     : null,
-                child: Text(canReturn ? '반품 신청' : '배송 후 반품 신청 가능'),
+                child: Text(buttonLabel),
               ),
             ),
           ),

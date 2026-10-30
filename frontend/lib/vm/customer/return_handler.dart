@@ -6,6 +6,19 @@ import 'package:beauty_project/service/customer/customer_return_service.dart';
 import 'customer_handler.dart';
 import 'customer_providers.dart';
 
+/// 반려된 신청만 수량을 반환한다. 환불·수거 상태는 반품 가능 수량에 영향을 주지 않는다.
+int remainingReturnQuantity({
+  required CustomerOrderLine item,
+  required Iterable<CustomerReturnRequest> requests,
+}) {
+  final used = requests
+      .where(
+        (request) => request.itemId == item.id && request.status != 'REJECTED',
+      )
+      .fold<int>(0, (sum, request) => sum + request.quantity);
+  return (item.quantity - used).clamp(0, item.quantity);
+}
+
 final customerReturnServiceProvider = Provider<CustomerReturnService>(
   (ref) => CustomerReturnService(
     client: ref.watch(customerHttpClientProvider),

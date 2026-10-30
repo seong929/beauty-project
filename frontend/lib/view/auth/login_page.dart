@@ -50,6 +50,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       );
       return;
     }
+
+    // 로그인 성공 시 로그인 화면 닫기
+    Navigator.of(context).pop();
   }
 
   void _goToCarrierLogin() {

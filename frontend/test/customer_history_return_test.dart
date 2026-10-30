@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:beauty_project/model/customer/customers.dart';
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/model/customer/order.dart';
+import 'package:beauty_project/model/customer/return_request.dart';
 import 'package:beauty_project/service/customer/customer_auth_service.dart';
 import 'package:beauty_project/service/customer/customer_delivery_service.dart';
 import 'package:beauty_project/service/customer/customer_order_service.dart';
@@ -13,7 +14,9 @@ import 'package:beauty_project/view/customer/login/customer_auth_widgets.dart';
 import 'package:beauty_project/view/customer/mypage/mypage_screen.dart';
 import 'package:beauty_project/view/customer/order/check_screen.dart';
 import 'package:beauty_project/view/customer/order/list_screen.dart';
+import 'package:beauty_project/view/customer/order/detail_screen.dart';
 import 'package:beauty_project/view/customer/return/return_request_screen.dart';
+import 'package:beauty_project/view/customer/return/return_status_screen.dart';
 import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/customer_providers.dart';
@@ -50,6 +53,9 @@ class _Server {
   final requests = <http.Request>[];
   final returns = <Map<String, dynamic>>[];
   int? failure;
+  bool failReturnReads = false;
+  Completer<void>? holdReturnReads;
+  final extraOrderRows = <Map<String, dynamic>>[];
   int get writes =>
       requests.where((request) => request.method == 'POST').length;
   final products = [
@@ -83,6 +89,7 @@ class _Server {
         'sale_option': 'NORMAL',
         'delivery_id': i == 1 ? null : 'dlv_$i',
       },
+    ...extraOrderRows,
   ];
   final deliveries = [
     for (var i = 1; i <= 3; i++)
@@ -140,11 +147,21 @@ class _Server {
           'return_quantity',
         });
         expect(body['customer_id'], 'cus_history');
-        final row = {...returnRow(), ...body};
+        final row = {
+          ...returnRow(),
+          ...body,
+          'return_id': 'ret_${body['order_item_id']}_${returns.length + 1}',
+        };
         returns.add(row);
         return _json(row, 201);
       }
       expect(request.url.queryParameters['customer_id'], 'cus_history');
+      if (holdReturnReads != null) {
+        await holdReturnReads!.future;
+      }
+      if (failReturnReads) {
+        return _json({'detail': 'return lookup failed'}, 503);
+      }
       return _json({
         'result': returns
             .where(
@@ -220,6 +237,354 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tapCheckoutControl(tester, 'return-confirm');
+  }
+
+  test(
+    'remaining quantities count all non-rejected returns independently of refund status',
+    () {
+      const item = CustomerOrderLine(
+        id: 'ord_3_1',
+        productId: 'sku_3',
+        name: 'Cream',
+        quantity: 2,
+        unitPrice: 14000,
+      );
+      final server = _Server();
+      for (final status in [
+        'REQUESTED',
+        'APPROVED',
+        'COLLECTING',
+        'INSPECTING',
+        'COMPLETED',
+      ]) {
+        for (final refund in ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']) {
+          final request = CustomerReturnRequest.fromJson({
+            ...server.returnRow(),
+            'return_status': status,
+            'refund_status': refund,
+          });
+          expect(remainingReturnQuantity(item: item, requests: [request]), 1);
+        }
+      }
+      final rejected = CustomerReturnRequest.fromJson({
+        ...server.returnRow(quantity: 2),
+        'return_status': 'REJECTED',
+      });
+      final otherItem = CustomerReturnRequest.fromJson({
+        ...server.returnRow(quantity: 2),
+        'order_item_id': 'other',
+      });
+      expect(
+        remainingReturnQuantity(item: item, requests: [rejected, otherItem]),
+        2,
+      );
+      expect(
+        remainingReturnQuantity(
+          item: item,
+          requests: [
+            CustomerReturnRequest.fromJson(server.returnRow(quantity: 3)),
+          ],
+        ),
+        0,
+      );
+    },
+  );
+
+  testWidgets(
+    'fully returned purchase detail blocks creation and preserves return history',
+    (tester) async {
+      final server = _Server();
+      final order = await server.deliveredOrder();
+      server.returns.add({
+        ...server.returnRow(quantity: 2),
+        'return_status': 'COMPLETED',
+        'refund_status': 'PROCESSING',
+      });
+      await pump(
+        tester,
+        server,
+        home: CustomerOrderDetailScreen(order: order, item: order.items.first),
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('반품 가능 수량 0개'), findsOneWidget);
+      expect(find.text('반품 가능 수량 없음'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('반품 처리 완료'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('반품 처리 완료'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('customer-return-status')), findsOneWidget);
+      expect(server.writes, 0);
+    },
+  );
+
+  testWidgets(
+    'partial completed return permits only the remainder and updates detail after submission',
+    (tester) async {
+      final server = _Server();
+      final order = await server.deliveredOrder();
+      server.returns.add({
+        ...server.returnRow(),
+        'return_status': 'COMPLETED',
+        'refund_status': 'PROCESSING',
+      });
+      await pump(
+        tester,
+        server,
+        home: CustomerOrderDetailScreen(order: order, item: order.items.first),
+      );
+      expect(find.text('반품 가능 수량 1개'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+            .onPressed,
+        isNotNull,
+      );
+      await tapCheckoutControl(tester, 'order-detail-return');
+      await fillReturn(tester);
+      await tester.enterText(find.byKey(const Key('return-quantity')), '2');
+      await tapCheckoutControl(tester, 'return-submit');
+      expect(server.writes, 0);
+      expect(find.text('1~1개로 입력해 주세요.'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('return-quantity')), '1');
+      await tapCheckoutControl(tester, 'return-submit');
+      expect(server.writes, 1);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('customer-order-detail')), findsOneWidget);
+      expect(find.text('반품 가능 수량 0개'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byTooltip('구매 상세 새로고침'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+
+  testWidgets('rejected return releases quantity after a server refresh', (
+    tester,
+  ) async {
+    final server = _Server();
+    final order = await server.deliveredOrder();
+    server.returns.add(server.returnRow(quantity: 2));
+    await pump(
+      tester,
+      server,
+      home: CustomerOrderDetailScreen(order: order, item: order.items.first),
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+          .onPressed,
+      isNull,
+    );
+    server.returns.single['return_status'] = 'REJECTED';
+    await tester.tap(find.byTooltip('구매 상세 새로고침'));
+    await tester.pumpAndSettle();
+    expect(find.text('반품 가능 수량 2개'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('lookup failures disable the detail button until refreshed', (
+    tester,
+  ) async {
+    final server = _Server()..failReturnReads = true;
+    final order = await server.deliveredOrder();
+    await pump(
+      tester,
+      server,
+      home: CustomerOrderDetailScreen(order: order, item: order.items.first),
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+          .onPressed,
+      isNull,
+    );
+    server.failReturnReads = false;
+    await tester.tap(find.byTooltip('구매 상세 새로고침'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(server.writes, 0);
+  });
+
+  testWidgets(
+    'refreshing history blocks creation while stale data is retained',
+    (tester) async {
+      final server = _Server();
+      final order = await server.deliveredOrder();
+      await pump(
+        tester,
+        server,
+        home: CustomerOrderDetailScreen(order: order, item: order.items.first),
+      );
+      server.holdReturnReads = Completer<void>();
+      server.returns.add(server.returnRow(quantity: 2));
+      await tester.tap(find.byTooltip('구매 상세 새로고침'));
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+            .onPressed,
+        isNull,
+      );
+      server.holdReturnReads!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('반품 가능 수량 0개'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('order-detail-return')))
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+
+  testWidgets(
+    'grouped purchase opens an item with remaining quantity instead of an exhausted item',
+    (tester) async {
+      final server = _Server();
+      server.extraOrderRows.add({
+        ...server.orderRows.last,
+        'order_item_id': 'ord_3_2',
+      });
+      final order = await server.deliveredOrder();
+      server.returns.add({
+        ...server.returnRow(quantity: 2),
+        'return_status': 'COMPLETED',
+      });
+      await pump(
+        tester,
+        server,
+        home: CustomerOrderDetailScreen(
+          order: order,
+          item: order.displayItems.last,
+        ),
+      );
+      expect(find.text('반품 가능 수량 2개'), findsOneWidget);
+      await tapCheckoutControl(tester, 'order-detail-return');
+      await fillReturn(tester);
+      await tapCheckoutControl(tester, 'return-submit');
+      expect(server.writes, 1);
+      final body = jsonDecode(
+        server.requests.lastWhere((request) => request.method == 'POST').body,
+      );
+      expect(body['order_item_id'], 'ord_3_2');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  test(
+    'optional processing dates parse from API and remain null for legacy responses',
+    () async {
+      final server = _Server();
+      final legacy = CustomerReturnRequest.fromJson(server.returnRow());
+      expect(legacy.approvedOn, isNull);
+      expect(legacy.inspectionCompletedOn, isNull);
+      server.returns.add({
+        ...server.returnRow(),
+        'approved_on': '2026-10-30',
+        'inspection_completed_on': '2026-11-03',
+      });
+      final request = (await CustomerReturnService(
+        client: server.client,
+        baseUrl: Uri.parse('http://test/'),
+      ).fetch('cus_history')).single;
+      expect(request.approvedOn, DateTime(2026, 10, 30));
+      expect(request.inspectionCompletedOn, DateTime(2026, 11, 3));
+      final empty = CustomerReturnRequest.fromJson({
+        ...server.returnRow(),
+        'approved_on': null,
+        'inspection_completed_on': null,
+      });
+      expect(empty.approvedOn, isNull);
+      expect(empty.inspectionCompletedOn, isNull);
+    },
+  );
+
+  for (final hasDates in [false, true]) {
+    testWidgets(
+      'processing timeline ${hasDates ? 'displays stored dates' : 'keeps missing dates unknown'}',
+      (tester) async {
+        final server = _Server();
+        final order = await server.deliveredOrder();
+        final row = {
+          ...server.returnRow(),
+          'return_status': 'COMPLETED',
+          'pickup_status': 'COLLECTED',
+          'pickup_requested_on': '2026-10-31',
+          'pickup_completed_on': '2026-11-01',
+          'headquarters_received_on': '2026-11-02',
+          'inspection_result': 'Inspected',
+          if (hasDates) 'approved_on': '2026-10-30',
+          if (hasDates) 'inspection_completed_on': '2026-11-03',
+        };
+        server.returns.add(row);
+        await pump(
+          tester,
+          server,
+          home: CustomerReturnStatusScreen(
+            order: order,
+            item: order.items.first,
+            initial: CustomerReturnRequest.fromJson(row),
+          ),
+        );
+
+        Future<void> expectEvent(String title, String date) async {
+          await tester.scrollUntilVisible(
+            find.text(title),
+            150,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          final event = find
+              .ancestor(
+                of: find.text(title),
+                matching: find.byType(IntrinsicHeight),
+              )
+              .first;
+          expect(
+            find.descendant(of: event, matching: find.text(date)),
+            findsOneWidget,
+          );
+        }
+
+        await expectEvent('반품 신청', '2026-10-29');
+        await expectEvent('반품 승인', hasDates ? '2026-10-30' : '처리일 미제공');
+        await expectEvent('회수 요청', '2026-10-31');
+        await expectEvent('수거 완료', '2026-11-01');
+        await expectEvent('본사 수령', '2026-11-02');
+        await expectEvent('검수 완료', hasDates ? '2026-11-03' : '처리일 미제공');
+        expect(server.writes, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   test(
@@ -483,6 +848,14 @@ void main() {
       });
       await tapCheckoutControl(tester, 'return-status-refresh');
       expect(find.text('환불 처리 중'), findsOneWidget);
+      expect(find.text('환불 완료'), findsNothing);
+      expect(
+        find.text('환불 상태는 내부 업무 진행 현황입니다. 외부 결제 취소·실제 금액 반환은 연동되어 있지 않습니다.'),
+        findsOneWidget,
+      );
+      server.returns[0]['refund_status'] = 'FAILED';
+      await tapCheckoutControl(tester, 'return-status-refresh');
+      expect(find.text('환불 처리 실패'), findsOneWidget);
       expect(find.text('환불 완료'), findsNothing);
       await tester.scrollUntilVisible(
         find.byKey(const Key('return-current-status')),

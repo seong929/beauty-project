@@ -175,7 +175,7 @@ class CustomerReturnStatusScreen extends ConsumerWidget {
                     _event(
                       request.status == 'REJECTED' ? '반품 반려' : '반품 승인',
                       request.approved || request.status == 'REJECTED',
-                      null,
+                      request.status == 'REJECTED' ? null : request.approvedOn,
                     ),
                     _event(
                       '회수 요청',
@@ -195,10 +195,14 @@ class CustomerReturnStatusScreen extends ConsumerWidget {
                     _event(
                       '검수 완료',
                       request.status == 'COMPLETED',
-                      null,
+                      request.inspectionCompletedOn,
                       last: true,
                     ),
                     OrderInformationRow('환불 상태', request.refundLabel),
+                    const Text(
+                      '환불 상태는 내부 업무 진행 현황입니다. 외부 결제 취소·실제 금액 반환은 연동되어 있지 않습니다.',
+                      style: TextStyle(fontSize: 11, color: SodamStyle.muted),
+                    ),
                     OrderInformationRow(
                       '처리 결과',
                       request.inspectionResult?.isNotEmpty == true

@@ -82,6 +82,26 @@ class CustomerReturnTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["return_id"], "ret_ord_1_1_3")
 
+    def test_fully_requested_or_completed_quantity_blocks_another_request(self):
+        self.cursor.fetchone.side_effect = [
+            {"purchase_quantity": 2, "order_status": "DELIVERED"},
+            {"last_seq": 1, "requested_qty": 2},
+        ]
+        response = self.submit()
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("남은 수량: 0", response.json()["detail"])
+        self.conn.rollback.assert_called_once()
+        self.conn.commit.assert_not_called()
+        self.assertEqual(self.cursor.execute.call_count, 2)
+
+    def test_quantity_policy_excludes_only_rejected_and_not_refund_state(self):
+        self.assertEqual(self.submit().status_code, 201)
+        query = self.cursor.execute.call_args_list[1].args[0]
+        self.assertIn("return_status <> 'REJECTED'", query)
+        self.assertIn("SUM(CASE", query)
+        self.assertNotIn("refund_status", query)
+        self.assertNotIn("pickup_status", query)
+
     def test_input_validation_happens_before_database_access(self):
         for override in ({"customer_id": " "}, {"return_reason": " "},
                          {"return_reason": "가" * 501}, {"return_quantity": 0}, {"extra": "x"}):

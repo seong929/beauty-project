@@ -315,3 +315,21 @@ $RECYCLE.BIN/
 /backend/..automatic_approval_daily_state.json.*.tmp
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,python,flutter,dart,visualstudiocode
+
+backend/password_hash_backup.local.json
+
+# Local backup patches
+/merge-staged-backup.patch
+/my-fixes-backup.patch
+
+# Local generated output
+/output/
+
+# Local test password reset script
+/backend/reset_test_customer_password.py
+
+# Local Flutter API test entrypoint
+/frontend/lib/test_customer_api.dart
+
+# Windows desktop platform (not used in current project)
+/frontend/windows/

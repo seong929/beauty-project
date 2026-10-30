@@ -5,6 +5,7 @@ import '../../service/admin/management_service.dart';
 import '../auth/api_client_provider.dart';
 import '../auth/auth_notifier.dart';
 import '../staff/staff_inventory_vm.dart';
+import 'return_management_state.dart';
 
 final managementServiceProvider = Provider<ManagementService>(
   (ref) => ManagementService(ref.watch(apiClientProvider)),
@@ -13,7 +14,77 @@ final managementServiceProvider = Provider<ManagementService>(
 final returnListProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => ref.watch(managementServiceProvider).getReturns(),
+      retry: (_, _) => null,
     );
+
+final returnManagementProvider =
+    NotifierProvider.autoDispose<
+      ReturnManagementNotifier,
+      ReturnManagementState
+    >(ReturnManagementNotifier.new);
+
+class ReturnManagementNotifier extends Notifier<ReturnManagementState> {
+  @override
+  ReturnManagementState build() => const ReturnManagementState();
+
+  void changeStatus(String status) {
+    if (!state.isProcessing &&
+        const {
+          'ALL',
+          'REQUESTED',
+          'APPROVED',
+          'REJECTED',
+          'COLLECTING',
+          'INSPECTING',
+          'COMPLETED',
+        }.contains(status)) {
+      state = state.copyWith(selectedStatus: status);
+    }
+  }
+
+  Future<void> updateRefundStatus({
+    required String returnId,
+    required String expectedStatus,
+    required String refundStatus,
+  }) async {
+    if (state.isProcessing || ref.read(managementActionsProvider)) return;
+    state = state.copyWith(processingReturnId: returnId, clearMessages: true);
+    var saved = false;
+    try {
+      final auth = ref.read(authProvider);
+      if (!auth.isAdmin || auth.employee == null) {
+        throw Exception('환불 상태 관리는 본사 관리자만 가능합니다.');
+      }
+      final result = await ref
+          .read(managementServiceProvider)
+          .updateRefundStatus(
+            returnId: returnId,
+            employeeId: auth.employee!.employeeId,
+            expectedStatus: expectedStatus,
+            refundStatus: refundStatus,
+          );
+      saved = true;
+      if (!ref.mounted) return;
+      final refreshed = ref.refresh(returnListProvider.future);
+      await refreshed;
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        clearProcessing: true,
+        successMessage: result['message'] as String,
+      );
+    } catch (error) {
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        clearProcessing: true,
+        errorMessage: saved
+            ? '내부 상태는 저장되었으나 목록 갱신에 실패했습니다. 새로고침해 주세요.'
+            : '${error.toString().replaceFirst('Exception: ', '')} 결과가 불확실하면 새로고침 후 확인해 주세요.',
+      );
+      // 네트워크 단절 시 서버가 저장했을 수 있으므로 자동 재전송하지 않는다.
+      if (!saved) ref.invalidate(returnListProvider);
+    }
+  }
+}
 
 final carrierChoicesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(

@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # 반품 승인 및 반려 요청
@@ -49,3 +49,12 @@ class ReturnInspectionRequest(BaseModel):
         min_length=1,
         max_length=500,
     )
+
+
+class ReturnRefundStatusRequest(BaseModel):
+    """내부 환불 업무 상태만 변경한다. 외부 환불 완료는 지원하지 않는다."""
+
+    model_config = ConfigDict(extra="forbid")
+    employee_id: str = Field(min_length=1, max_length=48)
+    expected_refund_status: Literal["PENDING", "PROCESSING", "FAILED"]
+    refund_status: Literal["PROCESSING", "FAILED"]

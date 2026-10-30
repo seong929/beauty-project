@@ -120,10 +120,10 @@ def get_customer_return_requests(
         with conn.cursor() as cur:
             # 고객의 구매항목과 연결된 반품만 조회한다. 관리자 전체 조회 API는 사용하지 않는다.
             sql = """SELECT rr.return_id, rr.order_item_id, rr.return_seq,
-                            rr.requested_on, rr.return_reason, rr.return_quantity,
+                            rr.requested_on, rr.approved_on, rr.return_reason, rr.return_quantity,
                             rr.return_status, rr.refund_status, rr.pickup_status,
                             rr.pickup_requested_on, rr.pickup_completed_on,
-                            rr.headquarters_received_on, rr.inspection_result,
+                            rr.headquarters_received_on, rr.inspection_result, rr.inspection_completed_on,
                             o.customer_id, o.order_id, o.shipping_address,
                             oi.purchase_quantity, oi.purchase_unit_price AS unit_price,
                             c.cosmetic_id, c.cosmetic_name AS product_name

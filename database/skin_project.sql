@@ -316,6 +316,7 @@ CREATE TABLE return_requests (
   order_item_id              VARCHAR(72) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '대상 구매 항목',
   return_seq INT UNSIGNED NOT NULL COMMENT '구매항목별 반품 순번',
   requested_on               DATE NOT NULL COMMENT '반품 신청일',
+  approved_on                DATE NULL COMMENT '반품 승인 처리일 (과거 미기록 데이터는 NULL)',
   return_reason              VARCHAR(500) NOT NULL COMMENT '반품 사유',
   return_quantity            INT UNSIGNED NOT NULL COMMENT '반품 수량',
   return_status              ENUM('REQUESTED','APPROVED','REJECTED','COLLECTING','INSPECTING','COMPLETED')
@@ -328,6 +329,7 @@ CREATE TABLE return_requests (
   pickup_completed_on        DATE NULL COMMENT '수거 완료일',
   headquarters_received_on   DATE NULL COMMENT '본사 반품 수령일',
   inspection_result          VARCHAR(500) NULL COMMENT '검수 결과',
+  inspection_completed_on    DATE NULL COMMENT '반품 검수 완료 처리일 (과거 미기록 데이터는 NULL)',
   PRIMARY KEY (return_id),
   UNIQUE KEY uq_returns_item_seq (order_item_id, return_seq),
   CONSTRAINT chk_returns_seq CHECK (return_seq > 0),

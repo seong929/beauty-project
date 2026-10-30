@@ -9,10 +9,12 @@ class CustomerReturnRequest {
     required this.refundStatus,
     required this.pickupStatus,
     this.requestedOn,
+    this.approvedOn,
     this.pickupRequestedOn,
     this.pickupCompletedOn,
     this.receivedOn,
     this.inspectionResult,
+    this.inspectionCompletedOn,
   });
   final String id;
   final String itemId;
@@ -23,10 +25,12 @@ class CustomerReturnRequest {
   final String refundStatus;
   final String pickupStatus;
   final DateTime? requestedOn;
+  final DateTime? approvedOn;
   final DateTime? pickupRequestedOn;
   final DateTime? pickupCompletedOn;
   final DateTime? receivedOn;
   final String? inspectionResult;
+  final DateTime? inspectionCompletedOn;
 
   factory CustomerReturnRequest.fromJson(Map<String, dynamic> json) =>
       CustomerReturnRequest(
@@ -39,6 +43,7 @@ class CustomerReturnRequest {
         refundStatus: json['refund_status'] as String,
         pickupStatus: json['pickup_status'] as String,
         requestedOn: DateTime.tryParse(json['requested_on']?.toString() ?? ''),
+        approvedOn: DateTime.tryParse(json['approved_on']?.toString() ?? ''),
         pickupRequestedOn: DateTime.tryParse(
           json['pickup_requested_on']?.toString() ?? '',
         ),
@@ -49,6 +54,9 @@ class CustomerReturnRequest {
           json['headquarters_received_on']?.toString() ?? '',
         ),
         inspectionResult: json['inspection_result']?.toString(),
+        inspectionCompletedOn: DateTime.tryParse(
+          json['inspection_completed_on']?.toString() ?? '',
+        ),
       );
 
   String get statusLabel => switch (status) {

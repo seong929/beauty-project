@@ -2,17 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../vm/admin/management_vm.dart';
+import '../../vm/auth/auth_notifier.dart';
 
-class ReturnManagementPage extends ConsumerStatefulWidget {
+class ReturnManagementPage extends ConsumerWidget {
   const ReturnManagementPage({super.key});
-
-  @override
-  ConsumerState<ReturnManagementPage> createState() =>
-      _ReturnManagementPageState();
-}
-
-class _ReturnManagementPageState extends ConsumerState<ReturnManagementPage> {
-  String _status = 'ALL';
   static const _statuses = {
     'ALL': '전체 상태',
     'REQUESTED': '신청',
@@ -108,27 +101,94 @@ class _ReturnManagementPageState extends ConsumerState<ReturnManagementPage> {
     }
   }
 
+  Future<void> _refund(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    String current,
+    String target,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(target == 'FAILED' ? '내부 환불 처리 실패 기록' : '내부 환불 처리 접수'),
+        content: const Text(
+          '내부 환불 업무 상태만 변경합니다. 외부 결제 취소·실제 금액 반환은 수행되지 않습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await ref
+        .read(returnManagementProvider.notifier)
+        .updateRefundStatus(
+          returnId: id,
+          expectedStatus: current,
+          refundStatus: target,
+        );
+  }
+
+  String _refundLabel(Object? status) => switch (status) {
+    'PENDING' => '환불 대기',
+    'PROCESSING' => '환불 처리 중 (내부 접수)',
+    'COMPLETED' => '환불 완료',
+    'FAILED' => '환불 처리 실패',
+    _ => status?.toString() ?? '-',
+  };
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final returns = ref.watch(returnListProvider);
-    final busy = ref.watch(managementActionsProvider);
+    final state = ref.watch(returnManagementProvider);
+    final busy = ref.watch(managementActionsProvider) || state.isProcessing;
+    final isAdmin = ref.watch(authProvider.select((auth) => auth.isAdmin));
+    final statusFilter = state.selectedStatus;
     return Scaffold(
       appBar: AppBar(
         title: const Text('반품 관리'),
         actions: [
           IconButton(
             tooltip: '새로고침',
-            onPressed: () => ref.invalidate(returnListProvider),
+            onPressed: busy ? null : () => ref.invalidate(returnListProvider),
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: Column(
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Text(
+              '환불 처리는 내부 업무 상태 관리입니다. 외부 결제 취소·실제 금액 반환은 연동되어 있지 않습니다.',
+            ),
+          ),
+          if (busy) const LinearProgressIndicator(),
+          if (state.errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                state.errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          if (state.successMessage != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(state.successMessage!),
+            ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: DropdownButtonFormField<String>(
-              initialValue: _status,
+              initialValue: statusFilter,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: '반품 상태 필터',
@@ -139,9 +199,15 @@ class _ReturnManagementPageState extends ConsumerState<ReturnManagementPage> {
                 for (final entry in _statuses.entries)
                   DropdownMenuItem(value: entry.key, child: Text(entry.value)),
               ],
-              onChanged: (value) {
-                if (value != null) setState(() => _status = value);
-              },
+              onChanged: busy
+                  ? null
+                  : (value) {
+                      if (value != null) {
+                        ref
+                            .read(returnManagementProvider.notifier)
+                            .changeStatus(value);
+                      }
+                    },
             ),
           ),
           Expanded(
@@ -159,7 +225,8 @@ class _ReturnManagementPageState extends ConsumerState<ReturnManagementPage> {
                 final visible = items
                     .where(
                       (item) =>
-                          _status == 'ALL' || item['return_status'] == _status,
+                          statusFilter == 'ALL' ||
+                          item['return_status'] == statusFilter,
                     )
                     .toList();
                 if (visible.isEmpty) {
@@ -173,8 +240,17 @@ class _ReturnManagementPageState extends ConsumerState<ReturnManagementPage> {
                     final id = item['return_id'].toString();
                     final status = item['return_status'];
                     final pickup = item['pickup_status'];
+                    final refund = item['refund_status'] as String?;
+                    final canRefund =
+                        isAdmin &&
+                        status == 'COMPLETED' &&
+                        pickup == 'COLLECTED' &&
+                        item['headquarters_received_on'] != null &&
+                        (item['inspection_result'] as String? ?? '')
+                            .trim()
+                            .isNotEmpty;
                     return Card(
-                      key: ValueKey('$id:$_status'),
+                      key: ValueKey('$id:$statusFilter'),
                       child: ExpansionTile(
                         title: Text('반품 $id · ${item['return_status']}'),
                         subtitle: Text(
@@ -185,7 +261,7 @@ class _ReturnManagementPageState extends ConsumerState<ReturnManagementPage> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '고객: ${item['customer_id']}\n주문 상품: ${item['order_item_id']}\n신청일: ${item['requested_on']}\n사유: ${item['return_reason']}\n환불: ${item['refund_status']}\n검수 결과: ${item['inspection_result'] ?? '-'}',
+                              '고객: ${item['customer_id']}\n주문 상품: ${item['order_item_id']}\n신청일: ${item['requested_on']}\n사유: ${item['return_reason']}\n환불: ${_refundLabel(refund)}\n검수 결과: ${item['inspection_result'] ?? '-'}',
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -193,6 +269,37 @@ class _ReturnManagementPageState extends ConsumerState<ReturnManagementPage> {
                             spacing: 8,
                             runSpacing: 8,
                             children: [
+                              if (canRefund &&
+                                  (refund == 'PENDING' || refund == 'FAILED'))
+                                FilledButton(
+                                  onPressed: busy
+                                      ? null
+                                      : () => _refund(
+                                          context,
+                                          ref,
+                                          id,
+                                          refund!,
+                                          'PROCESSING',
+                                        ),
+                                  child: Text(
+                                    refund == 'FAILED'
+                                        ? '내부 환불 재접수'
+                                        : '내부 환불 처리 접수',
+                                  ),
+                                ),
+                              if (canRefund && refund == 'PROCESSING')
+                                OutlinedButton(
+                                  onPressed: busy
+                                      ? null
+                                      : () => _refund(
+                                          context,
+                                          ref,
+                                          id,
+                                          refund!,
+                                          'FAILED',
+                                        ),
+                                  child: const Text('내부 환불 처리 실패 기록'),
+                                ),
                               if (status == 'REQUESTED') ...[
                                 FilledButton(
                                   onPressed: busy

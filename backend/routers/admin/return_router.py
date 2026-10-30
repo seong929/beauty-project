@@ -2,12 +2,28 @@ from fastapi import APIRouter, Depends
 from schemas.admin.return_schema import (ReturnDecisionRequest, ReturnPickupRequest, ReturnPickupStatusRequest, ReturnReceiveRequest, ReturnInspectionRequest)
 from services.admin.return_service import (get_return_list, decide_return, assign_return_pickup, update_return_pickup_status, receive_return, complete_return_inspection)
 from services.staff.staff_auth_service import require_authenticated_staff, require_matching_employee
+from services.staff.staff_auth_service import require_admin
+from schemas.admin.return_schema import ReturnRefundStatusRequest
+from services.admin.return_service import update_return_refund_status
 
 
 router = APIRouter(
     prefix="/admin",
     tags=["본사 관리자"],
 )
+
+
+@router.patch(
+    "/returns/{return_id}/refund-status",
+    summary="내부 환불 업무 상태 변경 (외부 결제 취소 미지원)",
+)
+def change_return_refund_status(
+    return_id: str,
+    data: ReturnRefundStatusRequest,
+    employee: dict = Depends(require_admin),
+):
+    require_matching_employee(employee, data.employee_id)
+    return update_return_refund_status(return_id, data)
 
 # 반품 요청 목록 조회
 @router.get(

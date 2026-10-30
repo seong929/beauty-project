@@ -1,3 +1,5 @@
+from schemas.delivery.return_pickup_schema import ReturnPickupItem
+from services.delivery.return_pickup_service import get_return_pickups, complete_return_pickup
 from fastapi import APIRouter, Depends
 from schemas.delivery.delivery_schema import (DeliveryListItem, DeliveryStatusUpdateRequest)
 from services.delivery.delivery_service import (get_delivery_list, update_delivery_status)
@@ -44,3 +46,12 @@ def change_delivery_status(
         data=data,
         carrier_id=carrier["carrier_id"],
     )
+
+@router.get('/return-pickups', response_model=list[ReturnPickupItem])
+def read_return_pickups(carrier: dict = Depends(require_carrier)):
+    return get_return_pickups(carrier['carrier_id'])
+
+
+@router.patch('/return-pickups/{return_id}/complete')
+def collect_return_pickup(return_id: str, carrier: dict = Depends(require_carrier)):
+    return complete_return_pickup(return_id, carrier['carrier_id'])

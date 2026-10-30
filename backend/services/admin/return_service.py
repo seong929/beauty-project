@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 from database import get_connection
-from schemas.admin.return_schema import (ReturnDecisionRequest, ReturnPickupStatusRequest, ReturnInspectionRequest)
+from schemas.admin.return_schema import (ReturnDecisionRequest, ReturnPickupStatusRequest, ReturnInspectionRequest, ReturnRefundStatusRequest)
 
 
 # 반품 승인 및 반려
@@ -61,11 +61,13 @@ def decide_return(
             cursor.execute(
                 """
                 UPDATE return_requests
-                SET return_status = %s
+                SET return_status = %s,
+                    approved_on = CASE WHEN %s = 'APPROVED' THEN CURDATE() ELSE approved_on END
                 WHERE return_id = %s
                   AND return_status = 'REQUESTED'
                 """,
                 (
+                    data.return_status,
                     data.return_status,
                     return_id,
                 ),
@@ -91,6 +93,70 @@ def decide_return(
         conn.close()
 
 
+# 내부 환불 업무 상태 변경 (외부 결제 취소 미지원)
+def update_return_refund_status(return_id: str, data: ReturnRefundStatusRequest):
+    """관리자 내부 업무 접수/실패 기록. 결제 취소나 실제 금액 반환을 수행하지 않는다."""
+    conn = get_connection()
+    try:
+        conn.begin()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT employee_role FROM employees WHERE employee_id = %s",
+                (data.employee_id,),
+            )
+            employee = cursor.fetchone()
+            if employee is None or employee["employee_role"] != "ADMIN":
+                raise HTTPException(403, "환불 상태 관리는 본사 관리자만 가능합니다.")
+
+            cursor.execute(
+                """SELECT return_status, pickup_status, headquarters_received_on,
+                          inspection_result, refund_status
+                   FROM return_requests WHERE return_id = %s FOR UPDATE""",
+                (return_id,),
+            )
+            request = cursor.fetchone()
+            if request is None:
+                raise HTTPException(404, "반품 요청을 찾을 수 없습니다.")
+            if (
+                request["return_status"] != "COMPLETED"
+                or request["pickup_status"] != "COLLECTED"
+                or request["headquarters_received_on"] is None
+                or not (request["inspection_result"] or "").strip()
+            ):
+                raise HTTPException(409, "수거·본사 수령 및 검수가 완료된 반품만 환불 접수할 수 있습니다.")
+
+            current = request["refund_status"]
+            allowed = {
+                "PENDING": {"PROCESSING"},
+                "PROCESSING": {"FAILED"},
+                "FAILED": {"PROCESSING"},
+                "COMPLETED": set(),
+            }
+            if current != data.expected_refund_status or data.refund_status not in allowed.get(current, set()):
+                raise HTTPException(409, "이미 처리되었거나 허용되지 않는 환불 상태 변경입니다. 새로고침해 주세요.")
+
+            cursor.execute(
+                """UPDATE return_requests SET refund_status = %s
+                   WHERE return_id = %s AND refund_status = %s""",
+                (data.refund_status, return_id, current),
+            )
+            if cursor.rowcount != 1:
+                raise HTTPException(409, "환불 상태가 변경되었습니다. 새로고침해 주세요.")
+        conn.commit()
+        return {
+            "return_id": return_id,
+            "previous_refund_status": current,
+            "refund_status": data.refund_status,
+            "external_refund_performed": False,
+            "message": "내부 환불 업무 상태를 저장했습니다. 실제 결제 취소·금액 반환은 수행되지 않았습니다.",
+        }
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 # 반품 요청 목록 조회
 def get_return_list():
     conn = get_connection()
@@ -106,6 +172,7 @@ def get_return_list():
                     o.customer_id,
                     rr.return_seq,
                     rr.requested_on,
+                    rr.approved_on,
                     rr.return_reason,
                     rr.return_quantity,
                     rr.return_status,
@@ -114,7 +181,8 @@ def get_return_list():
                     rr.pickup_requested_on,
                     rr.pickup_completed_on,
                     rr.headquarters_received_on,
-                    rr.inspection_result
+                    rr.inspection_result,
+                    rr.inspection_completed_on
                 FROM return_requests AS rr
                 JOIN order_items AS oi
                     ON rr.order_item_id = oi.order_item_id
@@ -535,7 +603,8 @@ def complete_return_inspection(
             """
             UPDATE return_requests
             SET inspection_result = %s,
-                return_status = 'COMPLETED'
+                return_status = 'COMPLETED',
+                inspection_completed_on = CURDATE()
             WHERE return_id = %s
             """,
             (

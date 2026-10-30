@@ -62,6 +62,23 @@ class ManagementService {
     );
   }
 
+  Future<Map<String, dynamic>> updateRefundStatus({
+    required String returnId,
+    required String employeeId,
+    required String expectedStatus,
+    required String refundStatus,
+  }) async =>
+      await _request(
+            'PATCH',
+            '/admin/returns/${Uri.encodeComponent(returnId)}/refund-status',
+            {
+              'employee_id': employeeId,
+              'expected_refund_status': expectedStatus,
+              'refund_status': refundStatus,
+            },
+          )
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> createCosmetic(Map<String, dynamic> data) async {
     return await _request('POST', '/admin/cosmetics', data)
         as Map<String, dynamic>;

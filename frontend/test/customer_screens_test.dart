@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:beauty_project/main.dart';
 import 'package:beauty_project/service/customer/customer_auth_service.dart';
 import 'package:beauty_project/model/customer/customers.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';

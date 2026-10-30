@@ -7,6 +7,7 @@ import '../../vm/delivery/delivery_notifier.dart';
 import '../../vm/delivery/delivery_state.dart';
 import '../../vm/auth/carrier_auth_notifier.dart';
 import '../auth/login_page.dart';
+import 'return_pickup_page.dart';
 
 class DeliveryPage extends ConsumerStatefulWidget {
   const DeliveryPage({super.key});
@@ -108,6 +109,11 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
               : _logout,
         ),
         actions: [
+          TextButton.icon(
+            onPressed: deliveryState.isProcessing ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReturnPickupPage())),
+            icon: const Icon(Icons.assignment_return_outlined),
+            label: const Text('반품 수거'),
+          ),
           IconButton(
             tooltip: '새로고침',
             onPressed:

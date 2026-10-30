@@ -90,15 +90,9 @@ class _CustomerReturnRequestScreenState
     final history = ref.watch(customerReturnsProvider(item?.id));
     final submission = ref.watch(customerReturnHandlerProvider);
     final handler = ref.read(customerReturnHandlerProvider.notifier);
-    final used =
-        history.value
-            ?.where((entry) => entry.status != 'REJECTED')
-            .fold<int>(0, (total, entry) => total + entry.quantity) ??
-        0;
-    final available = ((item?.quantity ?? 0) - used).clamp(
-      0,
-      item?.quantity ?? 0,
-    );
+    final available = item == null
+        ? 0
+        : remainingReturnQuantity(item: item, requests: history.value ?? []);
     final eligible =
         customerId == order.customerId &&
         item != null &&
