@@ -111,9 +111,15 @@ class ReturnManagementPage extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(target == 'FAILED' ? '내부 환불 처리 실패 기록' : '내부 환불 처리 접수'),
-        content: const Text(
-          '내부 환불 업무 상태만 변경합니다. 외부 결제 취소·실제 금액 반환은 수행되지 않습니다.',
+        title: Text(switch (target) {
+          'COMPLETED' => '환불 완료 기록',
+          'FAILED' => '내부 환불 처리 실패 기록',
+          _ => '내부 환불 처리 접수',
+        }),
+        content: Text(
+          target == 'COMPLETED'
+              ? '환불 업무를 완료했는지 확인해 주세요. 확인하면 환불 완료 상태로 저장되며 다시 변경할 수 없습니다. 외부 결제 취소·실제 금액 반환은 수행되지 않습니다.'
+              : '내부 환불 업무 상태만 변경합니다. 외부 결제 취소·실제 금액 반환은 수행되지 않습니다.',
         ),
         actions: [
           TextButton(
@@ -142,6 +148,14 @@ class ReturnManagementPage extends ConsumerWidget {
     'PROCESSING' => '환불 처리 중 (내부 접수)',
     'COMPLETED' => '환불 완료',
     'FAILED' => '환불 처리 실패',
+    _ => status?.toString() ?? '-',
+  };
+
+  String _pickupLabel(Object? status) => switch (status) {
+    'WAITING' => '수거 대기',
+    'SCHEDULED' => '회수 요청',
+    'COLLECTED' => '수거 완료',
+    'FAILED' => '수거 실패',
     _ => status?.toString() ?? '-',
   };
 
@@ -252,16 +266,16 @@ class ReturnManagementPage extends ConsumerWidget {
                     return Card(
                       key: ValueKey('$id:$statusFilter'),
                       child: ExpansionTile(
-                        title: Text('반품 $id · ${item['return_status']}'),
+                        title: Text(id),
                         subtitle: Text(
-                          '주문 ${item['order_id']} · 수량 ${item['return_quantity']} · 회수 ${pickup ?? '-'}',
+                          '${_refundLabel(refund)} · ${_pickupLabel(pickup)} · 주문 ${item['order_id']} · 수량 ${item['return_quantity']}',
                         ),
                         childrenPadding: const EdgeInsets.all(16),
                         children: [
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '고객: ${item['customer_id']}\n주문 상품: ${item['order_item_id']}\n신청일: ${item['requested_on']}\n사유: ${item['return_reason']}\n환불: ${_refundLabel(refund)}\n검수 결과: ${item['inspection_result'] ?? '-'}',
+                              '반품 ID: $id\n반품 상태: ${_statuses[status] ?? status ?? '-'}\n고객: ${item['customer_id']}\n주문 상품: ${item['order_item_id']}\n신청일: ${item['requested_on']}\n승인일: ${item['approved_on'] ?? '-'}\n수거 완료일: ${item['pickup_completed_on'] ?? '-'}\n본사 수령일: ${item['headquarters_received_on'] ?? '-'}\n검수 완료일: ${item['inspection_completed_on'] ?? '-'}\n사유: ${item['return_reason']}\n환불: ${_refundLabel(refund)}\n검수 결과: ${item['inspection_result'] ?? '-'}',
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -286,6 +300,19 @@ class ReturnManagementPage extends ConsumerWidget {
                                         ? '내부 환불 재접수'
                                         : '내부 환불 처리 접수',
                                   ),
+                                ),
+                              if (canRefund && refund == 'PROCESSING')
+                                FilledButton(
+                                  onPressed: busy
+                                      ? null
+                                      : () => _refund(
+                                          context,
+                                          ref,
+                                          id,
+                                          refund!,
+                                          'COMPLETED',
+                                        ),
+                                  child: const Text('환불 완료 기록'),
                                 ),
                               if (canRefund && refund == 'PROCESSING')
                                 OutlinedButton(

@@ -128,8 +128,12 @@ class MySQLRefundTests(unittest.TestCase):
             self.assertEqual(update("PROCESSING", "FAILED").status_code, 200)
             verify_persisted("FAILED")
             self.assertEqual(update("FAILED", "PROCESSING").status_code, 200)
-            self.assertEqual(update("PROCESSING", "COMPLETED").status_code, 422)
-            verify_persisted("PROCESSING")
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(update, "PROCESSING", "COMPLETED") for _ in range(2)]
+                responses = [future.result() for future in futures]
+            self.assertEqual(sorted(r.status_code for r in responses), [200, 409])
+            verify_persisted("COMPLETED")
+            self.assertEqual(update("PROCESSING", "COMPLETED").status_code, 409)
         finally:
             conn.rollback()
             if inserted:
