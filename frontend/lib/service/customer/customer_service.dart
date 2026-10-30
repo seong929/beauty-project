@@ -47,6 +47,7 @@ class CustomerService {
           'email': customer.email.trim(),
           'address': customer.address.trim(),
           'phone': customer.phone.trim(),
+          'gender': customer.gender,
         },
       ),
       mutation: true,
@@ -102,3 +103,5 @@ class CustomerService {
     }
   }
 }
+
+// 변경 내용(2026-10-30): 개인정보 수정에서 성별을 저장하며 출생연도는 전송하지 않는다.

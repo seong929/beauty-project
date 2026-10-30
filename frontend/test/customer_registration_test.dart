@@ -66,8 +66,9 @@ void main() {
           'email': 'sodam@example.com',
           'address': '서울시',
           'phone': '010-1234-5678',
+          'gender': 'UNDISCLOSED',
         });
-        expect(request.bodyFields.containsKey('gender'), isFalse);
+        expect(request.bodyFields['gender'], 'UNDISCLOSED');
         expect(request.bodyFields.containsKey('birth_year'), isFalse);
         return signupSuccess(request);
       });

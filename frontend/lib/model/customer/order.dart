@@ -7,6 +7,7 @@ class CustomerOrderLine {
     required this.unitPrice,
     this.saleOption = 'NORMAL',
     this.deliveryId,
+    this.earnedPoints = 0,
   });
   final String id;
   final String productId;
@@ -15,6 +16,7 @@ class CustomerOrderLine {
   final double unitPrice;
   final String saleOption;
   final String? deliveryId;
+  final int earnedPoints;
   String get saleLabel => saleOption == 'NEAR_EXPIRY' ? '임박' : '일반';
   double get total => unitPrice * quantity;
 }
@@ -28,6 +30,12 @@ class CustomerOrder {
     required this.total,
     required this.items,
     this.orderedAt,
+    this.earnedPoints = 0,
+    this.pointsBalance,
+    this.recipient = '',
+    this.phone = '',
+    this.deliveryRequest = '',
+    this.usedPoints = 0,
   });
   final String id;
   final String customerId;
@@ -36,6 +44,13 @@ class CustomerOrder {
   final double total;
   final DateTime? orderedAt;
   final List<CustomerOrderLine> items;
+  final int earnedPoints;
+  final int? pointsBalance;
+  final String recipient;
+  final String phone;
+  final String deliveryRequest;
+  final int usedPoints;
+  double get paymentAmount => total - usedPoints;
   int get quantity => items.fold(0, (sum, item) => sum + item.quantity);
   List<CustomerOrderLine> get displayItems {
     final grouped = <(String, double, String, String?), CustomerOrderLine>{};

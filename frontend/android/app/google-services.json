@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "772694796423",
-    "project_id": "cosmetics-store-image-storage",
-    "storage_bucket": "cosmetics-store-image-storage.firebasestorage.app"
+    "project_number": "980679957418",
+    "project_id": "beauty-skin-20e94",
+    "storage_bucket": "beauty-skin-20e94.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:772694796423:android:196d3ece7393130235f022",
+        "mobilesdk_app_id": "1:980679957418:android:920918154d5446f473a9d3",
         "android_client_info": {
           "package_name": "com.example.beauty_project"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDUVV-f3uFFsOGATwFed2idyv7PwY-EsPE"
+          "current_key": "AIzaSyBPvTulTLYyWeqYzJZYFqiFr9-ypI0s6fw"
         }
       ],
       "services": {

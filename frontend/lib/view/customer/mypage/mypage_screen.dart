@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
-import 'package:beauty_project/vm/customer/product_search_handler.dart';
 import '../delivery/delivery_list_screen.dart';
 import '../login/customer_auth_widgets.dart';
 import '../login/customer_login_screen.dart';
 import '../order/list_screen.dart';
 import '../product/product_list.dart';
 import '../product/product_widgets.dart';
-import 'favorite_list_screen.dart';
 import 'profile_edit_screen.dart';
 import '../review/customer_review_list_screen.dart';
+import 'point_history_screen.dart';
+import 'package:beauty_project/vm/customer/point_handler.dart';
 
 class CustomerMyPageScreen extends ConsumerStatefulWidget {
   const CustomerMyPageScreen({super.key});
@@ -112,11 +112,14 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
   Widget build(BuildContext context) {
     final customer = ref.watch(customerHandlerProvider).value;
     final orders = ref.watch(customerOrdersProvider);
-    final points = customer?.pointsBalance.toString().replaceAllMapped(
+    final balance =
+        ref.watch(customerPointsProvider).value?.balance ??
+        customer?.pointsBalance ??
+        0;
+    final points = balance.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
       (match) => '${match[1]},',
     );
-    final favorites = ref.watch(favoriteProductsProvider);
     final shipping = orders.value
         ?.where((order) => order.status == 'SHIPPED')
         .length;
@@ -164,7 +167,7 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
                                 radius: 28,
                                 backgroundColor: Color(0xFFD6F4F6),
                                 child: Text(
-                                  '소담',
+                                  '하나',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: SodamStyle.green,
@@ -201,10 +204,8 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
                         InkWell(
                           key: const Key('mypage-points'),
                           borderRadius: BorderRadius.circular(10),
-                          onTap: () => _info(
-                            '마일리지',
-                            '현재 보유 마일리지 ${customer.pointsBalance}P\n마일리지 상세 내역 조회는 준비 중입니다.',
-                          ),
+                          onTap: () =>
+                              _open(const CustomerPointHistoryScreen()),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
@@ -246,20 +247,20 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
                           children: [
                             Expanded(
                               child: InkWell(
-                                key: const Key('mypage-favorites'),
+                                key: const Key('mypage-purchases'),
                                 onTap: () =>
-                                    _open(const CustomerFavoriteListScreen()),
+                                    _open(const CustomerOrderListScreen()),
                                 child: Column(
                                   children: [
                                     Text(
-                                      '${favorites.length}',
+                                      orders.value?.length.toString() ?? '—',
                                       style: const TextStyle(
                                         fontSize: 22,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
                                     const Text(
-                                      '찜한 상품',
+                                      '구매 주문',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: SodamStyle.muted,
@@ -311,15 +312,7 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
                         _menu(
                           Icons.account_balance_wallet_outlined,
                           '마일리지 내역',
-                          () => _info(
-                            '마일리지',
-                            '현재 보유 마일리지 ${customer.pointsBalance}P\n상세 내역 조회는 준비 중입니다.',
-                          ),
-                        ),
-                        _menu(
-                          Icons.favorite_border,
-                          '찜한 상품',
-                          () => _open(const CustomerFavoriteListScreen()),
+                          () => _open(const CustomerPointHistoryScreen()),
                         ),
                         _menu(
                           Icons.shopping_bag_outlined,
@@ -338,13 +331,6 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
                           '리뷰 내역',
                           () => _open(const CustomerReviewListScreen()),
                           key: const Key('mypage-reviews'),
-                        ),
-                        _menu(
-                          Icons.local_shipping_outlined,
-                          '배송 주소 관리',
-                          () => _open(
-                            const CustomerProfileEditScreen(addressOnly: true),
-                          ),
                         ),
                         _menu(
                           Icons.person_outline,
@@ -409,7 +395,7 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          '소담 · 매일의 아름다움 습관',
+                          '하나 · 매일의 아름다움 습관',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11,
@@ -425,3 +411,5 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
     );
   }
 }
+
+// 변경 내용(2026-10-30): 찜 메뉴를 제거하고 상단 요약을 구매 주문 수·배송 중 건수로 표시한다.

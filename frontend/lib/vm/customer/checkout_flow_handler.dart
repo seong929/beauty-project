@@ -2,6 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'cart_handler.dart';
 import 'checkout_handler.dart';
 import 'customer_handler.dart';
+import 'checkout_stock_handler.dart';
+import 'checkout_points_handler.dart';
+import 'point_handler.dart';
 
 enum CheckoutStep { information, amount, method, agreement }
 
@@ -88,6 +91,11 @@ class CheckoutFlowHandler extends Notifier<CheckoutFlowState> {
     // 상품·수량·주소가 바뀌면 최종 확인을 다시 받는다.
     ref.listen(selectedCartItemsProvider, (_, _) => _clearAgreements());
     ref.listen(checkoutAddressProvider, (_, _) => _clearAgreements());
+    ref.listen(checkoutPointsProvider, (_, _) => _clearAgreements());
+    ref.listen(customerPointsProvider, (_, _) => _clearAgreements());
+    ref.listen(checkoutStockProvider, (_, next) {
+      if (!next.canPurchase) _clearAgreements();
+    });
     return const CheckoutFlowState();
   }
 
@@ -96,9 +104,11 @@ class CheckoutFlowHandler extends Notifier<CheckoutFlowState> {
     if (address?.isComplete != true ||
         ref.read(selectedCartItemsProvider).isEmpty ||
         ref.read(customerHandlerProvider).value == null ||
-        !state.deliveryRequestValid) {
+        !state.deliveryRequestValid ||
+        !ref.read(checkoutPointSummaryProvider).canContinue) {
       return;
     }
+    if (!ref.read(checkoutStockProvider).canPurchase) return;
     if (state.step == CheckoutStep.method && state.method == null) return;
     if (state.step.index < CheckoutStep.agreement.index) {
       state = state.copyWith(step: CheckoutStep.values[state.step.index + 1]);
@@ -110,6 +120,12 @@ class CheckoutFlowHandler extends Notifier<CheckoutFlowState> {
       state = state.copyWith(step: CheckoutStep.values[state.step.index - 1]);
     }
   }
+
+  void reviewItems() => state = state.copyWith(
+    step: CheckoutStep.information,
+    purchaseAgreed: false,
+    privacyAgreed: false,
+  );
 
   void selectMethod(CheckoutPaymentMethod method) {
     if (!method.selectable) return;
@@ -157,3 +173,5 @@ final checkoutFlowProvider =
     NotifierProvider.autoDispose<CheckoutFlowHandler, CheckoutFlowState>(
       CheckoutFlowHandler.new,
     );
+
+// 변경 내용(2026-10-30): 재고 확인 실패·부족 시 다음 단계 진행을 막고 수량 변경 시 최종 동의를 갱신한다.

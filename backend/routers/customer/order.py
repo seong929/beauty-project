@@ -5,8 +5,10 @@ from enum import Enum
 from decimal import Decimal
 import logging
 import pymysql
+import re
 
 from database import get_connection
+from services.customer.point_service import MAX_POINTS, change_points, purchase_points
 
 router = APIRouter(tags=["주문 관리"])
 
@@ -28,6 +30,10 @@ class CheckoutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     customer_id: str = Field(min_length=1, max_length=64)
     shipping_address: str = Field(min_length=1, max_length=500)
+    shipping_recipient: str | None = Field(default=None, min_length=1, max_length=100)
+    shipping_phone: str | None = Field(default=None, min_length=1, max_length=30)
+    delivery_request: str | None = Field(default=None, max_length=200)
+    points_to_use: int = Field(default=0, strict=True, ge=0, le=MAX_POINTS)
     items: list[CheckoutItem] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -37,6 +43,13 @@ class CheckoutRequest(BaseModel):
             raise ValueError("동일 화장품이 중복되었습니다. 상품별 수량을 하나로 합쳐주세요.")
         if not self.shipping_address.strip():
             raise ValueError("배송지 주소를 입력해야 합니다.")
+        if self.shipping_recipient is not None and not self.shipping_recipient.strip():
+            raise ValueError('수령인을 입력해 주세요.')
+        if self.shipping_phone is not None and (
+            not re.fullmatch(r'\+?[0-9\s()-]+', self.shipping_phone.strip())
+            or len(re.sub(r'\D', '', self.shipping_phone)) < 7
+        ):
+            raise ValueError('수령인 연락처를 확인해 주세요.')
         return self
 
 
@@ -76,11 +89,15 @@ def checkout_cart(data: CheckoutRequest) -> dict:
         with conn.cursor() as cur:
             # 고객 행을 장바구니 변경 및 동일 고객의 중복 결제에 대한 직렬화 지점으로 사용.
             cur.execute(
-                "SELECT customer_id FROM customers WHERE customer_id = %s FOR UPDATE",
+                "SELECT customer_id, points_balance, customer_name, phone FROM customers WHERE customer_id = %s FOR UPDATE",
                 (customer_id,),
             )
-            if cur.fetchone() is None:
+            buyer = cur.fetchone()
+            if buyer is None:
                 raise HTTPException(404, "존재하지 않는 고객입니다.")
+            recipient = data.shipping_recipient.strip() if data.shipping_recipient is not None else buyer.get('customer_name')
+            phone = data.shipping_phone.strip() if data.shipping_phone is not None else buyer.get('phone')
+            delivery_request = (data.delivery_request or '').strip()
             if get_account_status(cur, customer_id) != "ACTIVE":
                 raise HTTPException(409, "활성 고객만 결제할 수 있습니다.")
 
@@ -123,17 +140,27 @@ def checkout_cart(data: CheckoutRequest) -> dict:
                     raise HTTPException(409, f"상품 가격이 올바르지 않습니다: {cosmetic_id}")
                 products[cosmetic_id] = (product["cosmetic_name"], price)
 
+            # 포인트는 기존 보유 잔액과 서버가 계산한 상품 금액까지만 사용한다.
+            goods_amount = sum((products[item.cosmetic_id][1] * item.quantity for item in data.items), Decimal('0'))
+            used_points = data.points_to_use
+            if used_points > int(buyer.get('points_balance') or 0):
+                raise HTTPException(409, '보유 포인트가 부족합니다. 잔액을 다시 확인해 주세요.')
+            if used_points > goods_amount:
+                raise HTTPException(409, '포인트는 상품 금액을 초과해 사용할 수 없습니다.')
+
             # 1. orders 생성 -> 이후 order_items에 order_id + seq 사용.
             order_seq = int(next_sequence(cur, "order"))
             order_id = f"ord_{order_seq}"
             cur.execute(
                 """INSERT INTO orders
-                   (order_id, customer_id, order_seq, order_status, shipping_address)
-                   VALUES (%s, %s, %s, 'PAID', %s)""",
-                (order_id, customer_id, order_seq, address),
+                   (order_id, customer_id, order_seq, order_status, shipping_address,
+                    shipping_recipient, shipping_phone, delivery_request, used_points)
+                   VALUES (%s, %s, %s, 'PAID', %s, %s, %s, %s, %s)""",
+                (order_id, customer_id, order_seq, address, recipient, phone, delivery_request, used_points),
             )
 
             total = Decimal("0")
+            earned_points = 0
             seq = 0
             purchased = []
 
@@ -178,25 +205,34 @@ def checkout_cart(data: CheckoutRequest) -> dict:
 
                     seq += 1
                     order_item_id = f"{order_id}_{seq}"
+                    total += price * count
+                    line_points = purchase_points(max(Decimal('0'), total - used_points)) - earned_points
+                    earned_points += line_points
                     cur.execute(
                         """INSERT INTO order_items
                            (order_item_id, order_id, order_item_seq, inventory_id,
-                            purchase_quantity, purchase_unit_price, sale_option)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                        (order_item_id, order_id, seq, inv_id, count, price, option),
+                            purchase_quantity, purchase_unit_price, sale_option, earned_points)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (order_item_id, order_id, seq, inv_id, count, price, option, line_points),
                     )
+                    cur.execute('''INSERT INTO stock_outbounds
+                        (order_item_id, inventory_id, delivery_id, outbound_quantity, outbound_on)
+                        VALUES (%s, %s, NULL, %s, NULL)''', (order_item_id, inv_id, count))
+                    remaining -= count
+                    purchased.append({
+                        "order_item_id": order_item_id,
+                        "cosmetic_id": item.cosmetic_id,
+                        "cosmetic_name": name,
+                        "inventory_id": inv_id,
+                        "quantity": count,
+                        "sale_option": option,
+                        "unit_price": price,
+                        "earned_points": line_points,
+                    })
 
-                remaining -= count
-                purchased.append({
-                    "order_item_id": order_item_id,
-                    "cosmetic_id": item.cosmetic_id,
-                    "cosmetic_name": name,
-                    "inventory_id": inv_id,
-                    "quantity": count,
-                    "sale_option": option,
-                    "unit_price": price,
-                })
-                total += price * item.quantity
+            # 먼저 사용 포인트를 차감한 뒤 실제 결제 금액의 10%를 적립한다.
+            change_points(cur, customer_id, order_id, -used_points, event='USE')
+            change_points(cur, customer_id, order_id, earned_points)
 
             # 2. 결제 성공 시 주문한 상품 중 장바구니에 있던 상품만 삭제.
             # 주문 생성·재고 차감·장바구니 삭제는 동일 트랜잭션에서 처리한다.
@@ -215,6 +251,12 @@ def checkout_cart(data: CheckoutRequest) -> dict:
             "result": "OK", "order_id": order_id,
             "customer_id": customer_id, "order_status": "PAID",
             "shipping_address": address, "total_amount": total,
+            "shipping_recipient": recipient, "shipping_phone": phone,
+            "delivery_request": delivery_request,
+            "earned_points": earned_points,
+            "used_points": used_points,
+            "payment_amount": total - used_points,
+            "points_balance": int(buyer.get('points_balance') or 0) - used_points + earned_points,
             "items": purchased,
             "cart_cleared": len(cart_ids - selected_ids) == 0,
             "cart_removed_cosmetic_ids": cart_purchased_ids,
@@ -260,10 +302,13 @@ def get_orders(customer_id: str = Query(..., min_length=1, max_length=64)):
             cur.execute(
                 """SELECT o.order_id, o.ordered_at AS order_date,
                           o.customer_id, o.shipping_address, o.order_status,
+                          o.shipping_recipient, o.shipping_phone, o.delivery_request,
+                          o.used_points,
                           oi.order_item_id, oi.order_item_seq,
                           c.cosmetic_id, c.cosmetic_name AS product_name,
                           oi.inventory_id, oi.sale_option,
                           oi.purchase_quantity AS quantity,
+                          oi.earned_points,
                           oi.purchase_unit_price AS unit_price,
                           oi.purchase_quantity * oi.purchase_unit_price AS item_amount,
                           (SELECT SUM(x.purchase_quantity * x.purchase_unit_price)

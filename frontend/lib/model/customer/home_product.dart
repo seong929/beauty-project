@@ -1,4 +1,5 @@
 import 'cosmetic.dart';
+import 'storage_image.dart';
 
 // 상품 표시 모델. DB 상품은 실제 번호·용량·가격을 사용하며 예시 데이터는 별도로 보존한다.
 class HomeProduct extends Cosmetic {
@@ -10,16 +11,19 @@ class HomeProduct extends Cosmetic {
     required this.imageAsset,
     this.isDatabaseProduct = false,
     this.hasKnownPrice = true,
-    super.brand = '소담 셀렉션',
+    super.brand = '하나 셀렉션',
     super.volume = '',
     super.availableQuantity = 1,
     this.catalogOptions,
+    this.storageImage,
   });
 
   final String imageAsset;
   final bool isDatabaseProduct;
   final bool hasKnownPrice;
   final List<HomeProductOption>? catalogOptions;
+  final CustomerStorageImage? storageImage;
+  bool get isStoragePreview => storageImage != null && !isDatabaseProduct;
 
   factory HomeProduct.fromCatalog(Cosmetic product) => HomeProduct(
     id: product.id,
@@ -58,8 +62,8 @@ class HomeProduct extends Cosmetic {
 
   String get description => isDatabaseProduct
       ? '$brand의 $name입니다. 용량과 가격은 현재 등록된 판매 정보를 기준으로 표시합니다.'
-      : '$name으로 매일의 뷰티 루틴을 가볍게 완성해 보세요. '
-            '편안한 사용감과 산뜻한 마무리를 담은 소담의 예시 상품입니다.';
+      : '$name으로 매일의 피부 루틴을 가볍게 완성해 보세요. '
+            '편안한 사용감과 산뜻한 마무리를 담은 하나의 예시 상품입니다.';
 
   List<HomeProductOption> get options =>
       catalogOptions ??
@@ -136,5 +140,8 @@ final List<HomeProduct> homePreviewProducts = List.unmodifiable([
       price: _productDetails[index].$2.toDouble(),
       category: _productDetails[index].$3,
       imageAsset: 'images/화면 캡처${index + 1}.png',
+      availableQuantity: 99,
     ),
 ]);
+
+// 변경 내용(2026-10-30): 화면 검증용 예시 상품의 재고는 99개로 명시한다. 실제 판매 재고는 DB API를 사용한다.

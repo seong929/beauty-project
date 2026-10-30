@@ -5,7 +5,8 @@ import '../../vm/auth/auth_notifier.dart';
 import 'carrier_login_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.showCarrierLogin = false});
+  final bool showCarrierLogin;
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
@@ -52,7 +53,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
 
     // 로그인 성공 시 로그인 화면 닫기
-    Navigator.of(context).pop();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   void _goToCarrierLogin() {
@@ -185,29 +188,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      if (widget.showCarrierLogin) ...[
+                        const SizedBox(height: 16),
+                        const Divider(),
 
-                      const Divider(),
+                        const SizedBox(height: 8),
 
-                      const SizedBox(height: 8),
-
-                      // 배송업체 로그인 화면 이동
-                      SizedBox(
-                        height: 48,
-                        child: OutlinedButton.icon(
-                          onPressed: authState.isLoading
-                              ? null
-                              : _goToCarrierLogin,
-                          icon: const Icon(Icons.local_shipping_outlined),
-                          label: const Text(
-                            '배송업체 로그인',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                        // 배송업체 로그인 화면 이동
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: authState.isLoading
+                                ? null
+                                : _goToCarrierLogin,
+                            icon: const Icon(Icons.local_shipping_outlined),
+                            label: const Text(
+                              '배송업체 로그인',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -219,3 +223,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     );
   }
 }
+
+// 변경 내용(2026-10-30): 전용 앱의 루트 로그인 화면은 닫지 않고 인증 상태로 전환한다.
+// 관리자 전용 실행에서는 다른 유형의 로그인 이동 버튼을 숨긴다.

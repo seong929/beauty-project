@@ -76,7 +76,7 @@ class _CarrierLoginPageState
     return Scaffold(
       appBar: AppBar(
         title: const Text('배송업체 로그인'),
-        leading: IconButton(
+        leading: Navigator.of(context).canPop() ? IconButton(
           icon: const Icon(Icons.arrow_back),
           tooltip: '직원·관리자 로그인으로 돌아가기',
           onPressed: authState.isLoading
@@ -84,7 +84,7 @@ class _CarrierLoginPageState
               : () {
               Navigator.pop(context);
           },
-        ),
+        ) : null,
       ),
       backgroundColor: const Color(0xFFF5F7FA),
       body: Center(
@@ -231,3 +231,5 @@ class _CarrierLoginPageState
     );
   }
 }
+
+// 변경 내용(2026-10-30): 배송업체 전용 진입 화면에서는 뒤로가기를 숨긴다.

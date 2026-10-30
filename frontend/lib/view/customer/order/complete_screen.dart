@@ -79,7 +79,7 @@ class CustomerOrderCompleteScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                '소담을 찾아주셔서 고마워요.',
+                '하나를 찾아주셔서 고마워요.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: SodamStyle.muted),
               ),

@@ -22,6 +22,7 @@ class _CustomerProfileEditScreenState
   late final _email = TextEditingController(text: _customer?.email ?? '');
   late final _phone = TextEditingController(text: _customer?.phone ?? '');
   late final _address = TextEditingController(text: _customer?.address ?? '');
+  late String _gender = _customer?.gender ?? 'UNDISCLOSED';
   bool _busy = false;
   String? _error;
 
@@ -66,6 +67,8 @@ class _CustomerProfileEditScreenState
             email: _email.text,
             phone: _phone.text,
             address: _address.text,
+            gender: _gender,
+            updateDemographics: !widget.addressOnly,
           );
       if (!mounted ||
           ref.read(customerHandlerProvider).value?.customerId !=
@@ -131,6 +134,39 @@ class _CustomerProfileEditScreenState
                               ),
                               const SizedBox(height: 16),
                             ],
+                            if (!widget.addressOnly) ...[
+                              DropdownButtonFormField<String>(
+                                key: const Key('profile-gender'),
+                                initialValue: _gender,
+                                decoration: const InputDecoration(
+                                  labelText: '성별 (선택)',
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'UNDISCLOSED',
+                                    child: Text('미입력'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'M',
+                                    child: Text('남성'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'F',
+                                    child: Text('여성'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'OTHER',
+                                    child: Text('기타'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _gender = value);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                             OutlinedButton.icon(
                               onPressed: _search,
                               icon: const Icon(Icons.search),
@@ -141,15 +177,15 @@ class _CustomerProfileEditScreenState
                               key: const Key('profile-address'),
                               controller: _address,
                               maxLines: 3,
-                              maxLength: 200,
+                              maxLength: 500,
                               decoration: const InputDecoration(
                                 labelText: '기본 배송 주소',
                               ),
                               validator: (value) =>
                                   value == null ||
                                       value.trim().isEmpty ||
-                                      value.trim().length > 200
-                                  ? '주소를 1~200자로 입력해 주세요.'
+                                      value.trim().length > 500
+                                  ? '주소를 1~500자로 입력해 주세요.'
                                   : null,
                             ),
                             const SizedBox(height: 8),
@@ -186,3 +222,6 @@ class _CustomerProfileEditScreenState
     ),
   );
 }
+
+// 변경 내용(2026-10-30): 개인정보에서 성별을 수정하고 주소만 변경할 때는 기존 성별을 보존한다.
+// 출생연도 입력과 관련 전송·검증을 제거했다.

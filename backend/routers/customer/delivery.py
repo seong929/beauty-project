@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 import pymysql
+import re
 
 from database import get_connection
 
@@ -13,12 +14,28 @@ class ShippingAddressUpdate(BaseModel):
     customer_id: str = Field(min_length=1, max_length=64)
     order_id: str = Field(min_length=1, max_length=48)
     shipping_address: str = Field(min_length=1, max_length=500)
+    shipping_recipient: str | None = Field(default=None, min_length=1, max_length=100)
+    shipping_phone: str | None = Field(default=None, min_length=1, max_length=30)
+    delivery_request: str | None = Field(default=None, max_length=200)
 
     @field_validator("customer_id", "order_id", "shipping_address")
     @classmethod
     def reject_blank(cls, value):
         if not value.strip():
             raise ValueError("빈 값은 입력할 수 없습니다.")
+        return value
+
+    @field_validator('shipping_recipient', 'shipping_phone')
+    @classmethod
+    def validate_contact(cls, value, info):
+        if value is None:
+            return value
+        if not value.strip():
+            raise ValueError('수령인과 연락처를 입력해 주세요.')
+        if info.field_name == 'shipping_phone' and (
+            not re.fullmatch(r'\+?[0-9\s()-]+', value) or len(re.sub(r'\D', '', value)) < 7
+        ):
+            raise ValueError('수령인 연락처를 확인해 주세요.')
         return value
 
 
@@ -52,15 +69,22 @@ def customer_delivery_update(data: ShippingAddressUpdate):
 
             # 회원 기본 주소가 아니라 선택한 주문의 배송 주소만 수정한다.
             curs.execute(
-                """UPDATE orders SET shipping_address = %s
+                """UPDATE orders SET shipping_address = %s,
+                     shipping_recipient = COALESCE(%s, shipping_recipient),
+                     shipping_phone = COALESCE(%s, shipping_phone),
+                     delivery_request = COALESCE(%s, delivery_request)
                    WHERE order_id = %s AND customer_id = %s""",
-                (data.shipping_address, data.order_id, data.customer_id),
+                (data.shipping_address, data.shipping_recipient, data.shipping_phone,
+                 data.delivery_request, data.order_id, data.customer_id),
             )
         conn.commit()
         return {
             "result": "OK", "order_id": data.order_id,
             "customer_id": data.customer_id,
             "shipping_address": data.shipping_address,
+            **({"shipping_recipient": data.shipping_recipient} if data.shipping_recipient is not None else {}),
+            **({"shipping_phone": data.shipping_phone} if data.shipping_phone is not None else {}),
+            **({"delivery_request": data.delivery_request} if data.delivery_request is not None else {}),
             "message": "주문 배송지를 변경했습니다.",
         }
     except HTTPException:
@@ -92,6 +116,9 @@ def customer_delivery_select(
                     o.order_status,
                     o.ordered_at,
                     o.shipping_address,
+                    o.shipping_recipient,
+                    o.shipping_phone,
+                    o.delivery_request,
                     d.delivery_id,
                     d.delivery_status,
                     d.shipped_at,

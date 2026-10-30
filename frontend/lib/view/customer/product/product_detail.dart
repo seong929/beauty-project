@@ -6,7 +6,6 @@ import 'package:beauty_project/vm/customer/cart_persistence_handler.dart';
 import '../login/customer_auth_widgets.dart';
 import '../order/check_screen.dart';
 import '../review/product_reviews_section.dart';
-import 'product_list.dart';
 import 'product_widgets.dart';
 
 class CustomerProductDetailScreen extends ConsumerStatefulWidget {
@@ -26,7 +25,6 @@ class CustomerProductDetailScreen extends ConsumerStatefulWidget {
 
 class _CustomerProductDetailScreenState
     extends ConsumerState<CustomerProductDetailScreen> {
-  int _quantity = 1;
   bool _saving = false;
   final _reviewsKey = GlobalKey();
 
@@ -34,10 +32,7 @@ class _CustomerProductDetailScreenState
     if (widget.fromSearch) {
       Navigator.pop(context);
     } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CustomerProductListScreen()),
-      );
+      showCustomerProductSearch(context);
     }
   }
 
@@ -52,7 +47,7 @@ class _CustomerProductDetailScreenState
     try {
       final saved = await ref
           .read(cartPersistenceProvider.notifier)
-          .add(product, option, _quantity);
+          .add(product, option, 1);
       if (!mounted || !navigator.mounted) return;
       if (!saved) {
         messenger.showSnackBar(
@@ -99,7 +94,11 @@ class _CustomerProductDetailScreenState
     final product = widget.product;
     final option = widget.option ?? product.options.first;
     final saving = _saving || ref.watch(cartPersistenceProvider).isLoading;
-    final enabled = !saving && product.hasKnownPrice;
+    final enabled =
+        !saving &&
+        !product.isStoragePreview &&
+        product.hasKnownPrice &&
+        product.availableQuantity > 0;
     return Scaffold(
       key: const Key('product-detail-screen'),
       appBar: AppBar(
@@ -138,19 +137,6 @@ class _CustomerProductDetailScreenState
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             child: Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: SodamStyle.border),
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: ProductFavoriteButton(
-                    productId: product.id,
-                    product: product,
-                  ),
-                ),
-                const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
                     key: const Key('add-product-to-cart'),
@@ -160,7 +146,13 @@ class _CustomerProductDetailScreenState
                       foregroundColor: SodamStyle.ink,
                       side: const BorderSide(color: SodamStyle.border),
                     ),
-                    child: Text(saving ? '저장 중…' : '장바구니'),
+                    child: Text(
+                      saving
+                          ? '저장 중…'
+                          : product.isStoragePreview
+                          ? '판매 준비 중'
+                          : '장바구니',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -170,7 +162,7 @@ class _CustomerProductDetailScreenState
                     onPressed: enabled
                         ? () => _addToCart(checkout: true)
                         : null,
-                    child: const Text('구매하기'),
+                    child: Text(product.isStoragePreview ? '판매 준비 중' : '구매하기'),
                   ),
                 ),
               ],
@@ -191,12 +183,12 @@ class _CustomerProductDetailScreenState
                 LayoutBuilder(
                   builder: (context, constraints) => ProductPhoto(
                     product: product,
-                    height: constraints.maxWidth.clamp(240, 380),
+                    height: constraints.maxWidth,
                   ),
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  product.brand,
+                  customerBrandText(product.brand),
                   style: const TextStyle(fontSize: 12, color: SodamStyle.muted),
                 ),
                 const SizedBox(height: 6),
@@ -255,7 +247,9 @@ class _CustomerProductDetailScreenState
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          product.isDatabaseProduct
+                          product.isStoragePreview
+                              ? '표시된 용량과 가격은 임시 데이터입니다. 판매 정보 등록 후 구매할 수 있어요.'
+                              : product.isDatabaseProduct
                               ? '현재 등록된 상품 가격과 용량입니다.'
                               : '상품명·가격·옵션은 화면 구성을 위한 예시입니다.',
                           style: const TextStyle(
@@ -275,7 +269,7 @@ class _CustomerProductDetailScreenState
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  product.description,
+                  customerBrandText(product.description),
                   style: const TextStyle(
                     fontSize: 12,
                     height: 1.9,
@@ -286,44 +280,17 @@ class _CustomerProductDetailScreenState
                 const Divider(),
                 const SizedBox(height: 12),
                 const Text(
-                  '수량 선택',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  '상품 수량은 주문/결제 페이지에서 변경할 수 있어요.',
+                  style: TextStyle(fontSize: 12, color: SodamStyle.muted),
                 ),
-                const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: SodamStyle.field,
-                    borderRadius: BorderRadius.circular(7),
+                if (!product.isStoragePreview && product.availableQuantity <= 0)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      '재고 부족 · 현재 구매할 수 없습니다.',
+                      style: TextStyle(color: Colors.red, fontSize: 12),
+                    ),
                   ),
-                  padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          option.label,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                      IconButton(
-                        key: const Key('quantity-decrease'),
-                        tooltip: '수량 줄이기',
-                        onPressed: _quantity <= 1 || saving
-                            ? null
-                            : () => setState(() => _quantity--),
-                        icon: const Icon(Icons.remove, size: 18),
-                      ),
-                      Text('$_quantity', key: const Key('product-quantity')),
-                      IconButton(
-                        key: const Key('quantity-increase'),
-                        tooltip: '수량 늘리기',
-                        onPressed: _quantity >= 99 || saving
-                            ? null
-                            : () => setState(() => _quantity++),
-                        icon: const Icon(Icons.add, size: 18),
-                      ),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 18),
                 Row(
                   children: [
@@ -332,7 +299,7 @@ class _CustomerProductDetailScreenState
                     ),
                     Text(
                       product.hasKnownPrice
-                          ? productPrice(option.price * _quantity)
+                          ? productPrice(option.price)
                           : '가격 확인 불가',
                       key: const Key('detail-total'),
                       style: const TextStyle(
@@ -356,3 +323,6 @@ class _CustomerProductDetailScreenState
     );
   }
 }
+
+// 변경 내용(2026-10-30): 찜과 상세 수량 선택을 제거하고 결제 화면에서 수량을 정하도록 안내한다.
+// 재고 0 상품은 구매·장바구니 담기 버튼을 비활성화한다.

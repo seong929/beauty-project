@@ -8,6 +8,7 @@ import 'package:beauty_project/view/customer/product/product_list.dart';
 import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/cart_persistence_handler.dart';
 import 'support/preview_catalog.dart';
+import 'support/storage_catalog.dart';
 import 'package:beauty_project/vm/customer/product_handler.dart';
 import 'package:beauty_project/vm/customer/product_search_handler.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +41,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...storageCatalogOverrides(homePreviewProducts),
           homeCatalogProductsProvider.overrideWithValue(
             AsyncData(homePreviewProducts),
           ),
@@ -65,14 +67,14 @@ void main() {
     tester,
   ) async {
     final container = await pumpPage(tester);
-    expect(find.text('120개의 상품'), findsOneWidget);
+    expect(find.text('30개의 상품'), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('product-search-input')),
       '데일리 보습',
     );
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
-    expect(find.text('4개의 상품'), findsOneWidget);
+    expect(find.text('1개의 상품'), findsOneWidget);
     expect(container.read(recentProductSearchesProvider), ['데일리 보습']);
     expect(
       find.byKey(const Key('search-product-preview_1:30ml')),
@@ -86,7 +88,7 @@ void main() {
     expect(find.text('조건에 맞는 상품이 없어요.'), findsOneWidget);
     await tester.tap(find.text('검색 조건 초기화'));
     await tester.pumpAndSettle();
-    expect(find.text('120개의 상품'), findsOneWidget);
+    expect(find.text('30개의 상품'), findsOneWidget);
   });
 
   testWidgets('search sorts prices and validates filter ranges', (
@@ -154,20 +156,17 @@ void main() {
   );
 
   testWidgets(
-    'a 50ml card keeps its volume and price in detail and cart without a size selector',
+    'a selected 50ml product keeps its volume and price in detail and cart without a size selector',
     (tester) async {
-      final container = await pumpPage(tester);
-      final card = find.byKey(const Key('search-product-preview_1:50ml'));
-      await tester.tap(
-        find.descendant(
-          of: card,
-          matching: find.byKey(const Key('favorite-preview_1')),
+      final container = await pumpPage(
+        tester,
+        page: CustomerProductDetailScreen(
+          product: homePreviewProducts.first,
+          option: homePreviewProducts.first.options[1],
         ),
       );
-      await tester.tap(card);
-      await tester.pumpAndSettle();
       expect(find.byKey(const Key('product-detail-screen')), findsOneWidget);
-      expect(container.read(favoriteProductsProvider), contains('preview_1'));
+      expect(find.byIcon(Icons.favorite_border), findsNothing);
       expect(
         tester
             .widget<FilledButton>(find.byKey(const Key('add-product-to-cart')))
@@ -177,22 +176,20 @@ void main() {
       expect(find.text('용량 50ml'), findsOneWidget);
       expect(find.byKey(const Key('product-option-1')), findsNothing);
       expect(find.text('원하는 용량을 선택해 주세요.'), findsNothing);
-      await tester.ensureVisible(find.byKey(const Key('quantity-increase')));
-      await tester.tap(find.byKey(const Key('quantity-increase')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('quantity-increase')), findsNothing);
       expect(
         tester.widget<Text>(find.byKey(const Key('detail-total'))).data,
-        '49,800원',
+        '24,900원',
       );
       await tester.tap(find.byKey(const Key('add-product-to-cart')));
       await tester.pumpAndSettle();
       final item = container.read(cartHandlerProvider).single;
       expect(item.option.label, '50ml');
-      expect(item.quantity, 2);
-      expect(item.totalPrice, 49800);
+      expect(item.quantity, 1);
+      expect(item.totalPrice, 24900);
       await tester.tap(find.byKey(const Key('product-nav-2')));
       await tester.pumpAndSettle();
-      expect(find.text('합계 49,800원'), findsOneWidget);
+      expect(find.text('합계 24,900원'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -208,10 +205,7 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(find.text('용량 200ml'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('quantity-increase')));
-    await tester.tap(find.byKey(const Key('quantity-increase')));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('quantity-increase')), findsNothing);
     await tester.tap(find.byKey(const Key('product-nav-1')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('product-search-screen')), findsOneWidget);

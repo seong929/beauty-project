@@ -6,10 +6,10 @@ import 'design/sodam_theme.dart';
 import 'view/auth/login_page.dart';
 import 'vm/auth/auth_notifier.dart';
 import 'vm/auth/auth_state.dart';
+import 'app/bootstrap.dart';
 
-// Optional UI entry point. Existing main.dart and business code stay intact.
-// Images use the authenticated backend API; this entry needs no Firebase SDK init.
-void main() => runApp(const ProviderScope(child: SodamApp()));
+// 관리자 디자인 전용 진입점. 공용 Firebase 이미지와 단일 초기화 절차를 사용한다.
+Future<void> main() => launchApp(const SodamApp());
 
 class SodamApp extends ConsumerStatefulWidget {
   const SodamApp({super.key});
@@ -43,7 +43,7 @@ class _SodamAppState extends ConsumerState<SodamApp> {
               onLogout: () => ref.read(authProvider.notifier).logout(),
               onExpire: () => ref.read(authProvider.notifier).expireSession(),
             )
-          : const LoginPage(),
+          : const LoginPage(showCarrierLogin: false),
     );
   }
 }

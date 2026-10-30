@@ -6,6 +6,8 @@ import 'package:beauty_project/vm/customer/customer_auth_validation.dart';
 import 'package:beauty_project/vm/customer/auth/customer_registration_model.dart';
 
 import 'customer_auth_widgets.dart';
+import '../delivery/address_search_screen.dart';
+import 'package:beauty_project/vm/customer/auth/login_id_availability.dart';
 
 class CustomerSignupScreen extends ConsumerStatefulWidget {
   const CustomerSignupScreen({super.key});
@@ -24,7 +26,9 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
   final _address = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
-  final _birthYear = TextEditingController();
+  final _addressDetail = TextEditingController();
+  String _gender = 'UNDISCLOSED';
+  bool _searching = false;
   final _loginIdFocus = FocusNode();
   final _nameFocus = FocusNode();
   final _passwordFocus = FocusNode();
@@ -46,7 +50,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
       _address,
       _email,
       _phone,
-      _birthYear,
+      _addressDetail,
     ]) {
       controller.dispose();
     }
@@ -62,6 +66,29 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
       node.dispose();
     }
     super.dispose();
+  }
+
+  String get _fullAddress => [
+    _address.text.trim(),
+    _addressDetail.text.trim(),
+  ].where((part) => part.isNotEmpty).join(' ');
+
+  Future<void> _searchAddress() async {
+    if (_searching) return;
+    setState(() => _searching = true);
+    try {
+      final result = await ref.read(addressSearchLauncherProvider)(context);
+      if (!mounted || result == null) return;
+      _address.text = result.formatted;
+      _addressDetail.clear();
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  void _loginEdited(String value) {
+    ref.read(loginIdAvailabilityProvider.notifier).edit(value);
+    _clearError(value);
   }
 
   void _clearError(String _) {
@@ -82,7 +109,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
         ),
         _confirmationFocus,
       ),
-      (CustomerAuthValidation.address(_address.text), _addressFocus),
+      (CustomerAuthValidation.address(_fullAddress), _addressFocus),
       (CustomerAuthValidation.email(_email.text), _emailFocus),
       (CustomerAuthValidation.phone(_phone.text), _phoneFocus),
     ];
@@ -109,12 +136,17 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
       return;
     }
     FocusScope.of(context).unfocus();
+    if (!ref.read(loginIdAvailabilityProvider).confirmed(_loginId.text)) {
+      _loginIdFocus.requestFocus();
+      return;
+    }
     final registration = Customers(
       loginId: _loginId.text,
       password: _password.text,
       name: _name.text,
       email: _email.text,
-      address: _address.text,
+      address: _fullAddress,
+      gender: _gender,
       phone: _phone.text,
     );
     final success = await ref
@@ -139,6 +171,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
   Widget build(BuildContext context) {
     final registration = ref.watch(customerRegistrationProvider);
     final isBusy = registration.isLoading;
+    final availability = ref.watch(loginIdAvailabilityProvider);
     final error = registration.hasError ? registration.error.toString() : '';
     return CustomerAuthLayout(
       title: '회원가입',
@@ -155,7 +188,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                '소담과 함께해요',
+                '하나와 함께해요',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 24,
@@ -185,14 +218,14 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    flex: 3,
+                    flex: 2,
                     child: Semantics(
                       label: '고객 아이디',
                       child: TextFormField(
                         key: _idKey,
                         controller: _loginId,
                         focusNode: _loginIdFocus,
-                        onChanged: _clearError,
+                        onChanged: _loginEdited,
                         onFieldSubmitted: (_) => _nameFocus.requestFocus(),
                         enabled: !isBusy,
                         textAlign: TextAlign.center,
@@ -200,7 +233,12 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
-                        validator: CustomerAuthValidation.loginId,
+                        validator: (value) =>
+                            CustomerAuthValidation.loginId(value) ??
+                            (_attemptedSubmit &&
+                                    !availability.confirmed(value ?? '')
+                                ? '아이디 중복 확인을 완료해 주세요.'
+                                : null),
                         autocorrect: false,
                         autofillHints: const [AutofillHints.newUsername],
                         textInputAction: TextInputAction.next,
@@ -209,7 +247,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    flex: 7,
+                    flex: 1,
                     child: SizedBox(
                       height: 44,
                       child: Center(
@@ -218,7 +256,13 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                           height: 28,
                           child: OutlinedButton(
                             key: const Key('check-login-id'),
-                            onPressed: null,
+                            onPressed: isBusy || availability.checking
+                                ? null
+                                : () => ref
+                                      .read(
+                                        loginIdAvailabilityProvider.notifier,
+                                      )
+                                      .check(_loginId.text),
                             style: OutlinedButton.styleFrom(
                               padding: EdgeInsets.zero,
                               foregroundColor: SodamStyle.ink,
@@ -227,9 +271,9 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                                 borderRadius: BorderRadius.circular(16),
                               ),
                             ),
-                            child: const Text(
-                              '중복 확인 · 준비 중',
-                              style: TextStyle(
+                            child: Text(
+                              availability.checking ? '확인 중…' : '중복 확인',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -242,6 +286,29 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              if (availability.checking ||
+                  availability.available != null ||
+                  availability.error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    availability.error ??
+                        (availability.checking
+                            ? '아이디를 확인하고 있어요.'
+                            : availability.available == true
+                            ? '사용 가능한 아이디입니다.'
+                            : '이미 사용 중인 아이디입니다.'),
+                    key: const Key('login-id-availability'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color:
+                          availability.available == false ||
+                              availability.error != null
+                          ? Theme.of(context).colorScheme.error
+                          : SodamStyle.ink,
+                    ),
+                  ),
+                ),
               CustomerField(
                 label: '이름',
                 fieldKey: const Key('signup-name'),
@@ -321,58 +388,52 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                 onChanged: _clearError,
                 onSubmitted: (_) => _emailFocus.requestFocus(),
                 enabled: !isBusy,
-                validator: CustomerAuthValidation.address,
+                validator: (_) => CustomerAuthValidation.address(_fullAddress),
                 autofillHints: const [AutofillHints.fullStreetAddress],
               ),
               const SizedBox(height: 16),
+              OutlinedButton.icon(
+                key: const Key('signup-search-address'),
+                onPressed: isBusy || _searching ? null : _searchAddress,
+                icon: const Icon(Icons.search, size: 18),
+                label: Text(_searching ? '주소 검색 중…' : '우편번호 · 주소 검색'),
+              ),
+              const SizedBox(height: 12),
               CustomerField(
-                label: '출생연도 (선택·통계용)',
-                fieldKey: const Key('signup-birth-year'),
-                controller: _birthYear,
-                hint: '예: 1997',
-                enabled: false,
-                suffix: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                  child: Text(
-                    '준비 중',
-                    style: TextStyle(fontSize: 10, color: SodamStyle.muted),
-                  ),
-                ),
+                label: '상세주소 (동·호수 등)',
+                fieldKey: const Key('signup-address-detail'),
+                controller: _addressDetail,
+                enabled: !isBusy,
+                onChanged: _clearError,
+                validator: (_) => _fullAddress.length > 500
+                    ? '주소는 상세주소를 포함해 500자 이내로 입력해 주세요.'
+                    : null,
               ),
               const SizedBox(height: 16),
-              const CustomerFieldLabel('성별 (선택·통계용)'),
+              const CustomerFieldLabel('성별 (선택)'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 key: const Key('signup-gender'),
-                initialValue: 'UNDISCLOSED',
-                disabledHint: const Center(child: Text('미입력 · 준비 중')),
+                initialValue: _gender,
                 isExpanded: true,
-                icon: const SizedBox.shrink(),
-                alignment: Alignment.center,
                 style: const TextStyle(
                   fontFamily: 'NotoSansKR',
                   fontSize: 14,
-                  fontWeight: FontWeight.w500,
                   color: SodamStyle.ink,
                 ),
                 items: const [
-                  DropdownMenuItem(
-                    value: 'UNDISCLOSED',
-                    child: Center(child: Text('미입력 · 준비 중')),
-                  ),
+                  DropdownMenuItem(value: 'UNDISCLOSED', child: Text('미입력')),
+                  DropdownMenuItem(value: 'M', child: Text('남성')),
+                  DropdownMenuItem(value: 'F', child: Text('여성')),
+                  DropdownMenuItem(value: 'OTHER', child: Text('기타')),
                 ],
-                onChanged: null,
+                onChanged: isBusy
+                    ? null
+                    : (value) {
+                        if (value != null) setState(() => _gender = value);
+                      },
               ),
-              const SizedBox(height: 14),
-              const Text(
-                '출생연도·성별 입력은 준비 중이며 회원가입에 필요하지 않아요.\n아이디·이메일 중복은 가입 시 확인됩니다.',
-                style: TextStyle(
-                  fontSize: 11,
-                  height: 1.7,
-                  color: SodamStyle.muted,
-                ),
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               CustomerField(
                 label: '이메일',
                 fieldKey: const Key('signup-email'),
@@ -422,3 +483,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
     );
   }
 }
+
+// 변경 내용(2026-10-30): 실제 아이디 중복 확인, Daum 주소 검색·상세주소, 선택 성별 저장을 연결한다.
+// 출생연도 입력과 관련 전송·검증을 제거했다.
+// 아이디를 수정하면 기존 확인 결과가 취소되며, 중복 확인을 완료해야 가입할 수 있다.

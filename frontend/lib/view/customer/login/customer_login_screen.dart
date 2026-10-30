@@ -93,13 +93,13 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
     final isBusy = auth.isLoading;
     final error = auth.hasError ? auth.error.toString() : '';
     return CustomerAuthLayout(
-      title: '소담',
+      title: '하나',
       padding: const EdgeInsets.fromLTRB(26, 54, 26, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            '소담',
+            '하나',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 48,
@@ -110,7 +110,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '나에게 맞는 아름다움, 소담하게.',
+            '나에게 맞는 아름다움, 하나와 함께.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
@@ -131,7 +131,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            '로그인하고 나만의 뷰티 루틴을 찾아보세요.',
+            '로그인하고 나만의 피부 루틴을 찾아보세요.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
@@ -213,10 +213,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
                 TextButton(
                   onPressed: isBusy
                       ? null
-                      : () => _showNotice(
-                            '비밀번호 찾기',
-                            '비밀번호 찾기는 준비 중입니다.',
-                          ),
+                      : () => _showNotice('비밀번호 찾기', '비밀번호 찾기는 준비 중입니다.'),
                   child: const Text('비밀번호 찾기'),
                 ),
               ],
@@ -230,7 +227,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Text(
-              '나만의 뷰티 루틴을 소담과 함께 시작해 보세요.\n처음이신가요? 회원가입 후 로그인할 수 있습니다.',
+              '나만의 피부 루틴을 하나와 함께 시작해 보세요.\n처음이신가요? 회원가입 후 로그인할 수 있습니다.',
               style: TextStyle(
                 fontSize: 11,
                 height: 1.6,

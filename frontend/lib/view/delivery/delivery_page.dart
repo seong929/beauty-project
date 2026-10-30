@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,7 +5,7 @@ import '../../model/delivery/delivery.dart';
 import '../../vm/delivery/delivery_notifier.dart';
 import '../../vm/delivery/delivery_state.dart';
 import '../../vm/auth/carrier_auth_notifier.dart';
-import '../auth/login_page.dart';
+import '../auth/carrier_login_page.dart';
 import 'return_pickup_page.dart';
 
 class DeliveryPage extends ConsumerStatefulWidget {
@@ -38,9 +37,7 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
 
     // 로그인 화면으로 이동
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => const LoginPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const CarrierLoginPage()),
       (route) => false,
     );
   }
@@ -77,22 +74,20 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
     final deliveryState = ref.watch(deliveryProvider);
 
     ref.listen<DeliveryState>(deliveryProvider, (previous, next) {
-      final successChanged =
-          previous?.successMessage != next.successMessage;
+      final successChanged = previous?.successMessage != next.successMessage;
 
-      final errorChanged =
-          previous?.errorMessage != next.errorMessage;
+      final errorChanged = previous?.errorMessage != next.errorMessage;
 
       if (successChanged && next.successMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next.successMessage!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(next.successMessage!)));
       }
 
       if (errorChanged && next.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next.errorMessage!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(next.errorMessage!)));
       }
     });
 
@@ -103,26 +98,26 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
         leading: IconButton(
           tooltip: '로그아웃',
           icon: const Icon(Icons.logout),
-          onPressed: deliveryState.isLoading ||
-                  deliveryState.isProcessing
+          onPressed: deliveryState.isLoading || deliveryState.isProcessing
               ? null
               : _logout,
         ),
         actions: [
           TextButton.icon(
-            onPressed: deliveryState.isProcessing ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReturnPickupPage())),
+            onPressed: deliveryState.isProcessing
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ReturnPickupPage()),
+                  ),
             icon: const Icon(Icons.assignment_return_outlined),
             label: const Text('반품 수거'),
           ),
           IconButton(
             tooltip: '새로고침',
-            onPressed:
-                deliveryState.isLoading || deliveryState.isProcessing
+            onPressed: deliveryState.isLoading || deliveryState.isProcessing
                 ? null
                 : () {
-                    ref
-                        .read(deliveryProvider.notifier)
-                        .fetchDeliveryList();
+                    ref.read(deliveryProvider.notifier).fetchDeliveryList();
                   },
             icon: const Icon(Icons.refresh),
           ),
@@ -140,13 +135,9 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
                   if (constraints.maxWidth < 800) {
                     return Column(
                       children: [
-                        Expanded(
-                          child: _buildDeliveryList(deliveryState),
-                        ),
+                        Expanded(child: _buildDeliveryList(deliveryState)),
                         const SizedBox(height: 12),
-                        Expanded(
-                          child: _buildDeliveryDetail(deliveryState),
-                        ),
+                        Expanded(child: _buildDeliveryDetail(deliveryState)),
                       ],
                     );
                   }
@@ -177,45 +168,22 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
   Widget _buildSummary(DeliveryState state) {
     return Row(
       children: [
-        _summaryCard(
-          '전체',
-          state.totalCount,
-          Colors.grey,
-        ),
+        _summaryCard('전체', state.totalCount, Colors.grey),
         const SizedBox(width: 8),
-        _summaryCard(
-          '배송 준비',
-          state.readyCount,
-          Colors.orange,
-        ),
+        _summaryCard('배송 준비', state.readyCount, Colors.orange),
         const SizedBox(width: 8),
-        _summaryCard(
-          '배송 중',
-          state.inTransitCount,
-          Colors.blue,
-        ),
+        _summaryCard('배송 중', state.inTransitCount, Colors.blue),
         const SizedBox(width: 8),
-        _summaryCard(
-          '배송 완료',
-          state.deliveredCount,
-          Colors.green,
-        ),
+        _summaryCard('배송 완료', state.deliveredCount, Colors.green),
       ],
     );
   }
 
-  Widget _summaryCard(
-    String title,
-    int count,
-    Color color,
-  ) {
+  Widget _summaryCard(String title, int count, Color color) {
     return Expanded(
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: 16,
-            horizontal: 4,
-          ),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
           child: Column(
             children: [
               Text(
@@ -251,31 +219,16 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
                 const Expanded(
                   child: Text(
                     '배송 목록',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
                 DropdownButton<String>(
                   value: state.selectedStatus,
                   items: const [
-                    DropdownMenuItem(
-                      value: 'ALL',
-                      child: Text('전체'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'READY',
-                      child: Text('배송 준비'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'IN_TRANSIT',
-                      child: Text('배송 중'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'DELIVERED',
-                      child: Text('배송 완료'),
-                    ),
+                    DropdownMenuItem(value: 'ALL', child: Text('전체')),
+                    DropdownMenuItem(value: 'READY', child: Text('배송 준비')),
+                    DropdownMenuItem(value: 'IN_TRANSIT', child: Text('배송 중')),
+                    DropdownMenuItem(value: 'DELIVERED', child: Text('배송 완료')),
                   ],
                   onChanged: state.isProcessing
                       ? null
@@ -291,9 +244,7 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
             ),
           ),
           const Divider(height: 1),
-          Expanded(
-            child: _buildListContent(state),
-          ),
+          Expanded(child: _buildListContent(state)),
         ],
       ),
     );
@@ -301,17 +252,13 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
 
   Widget _buildListContent(DeliveryState state) {
     if (state.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     final deliveries = state.filteredDeliveries;
 
     if (deliveries.isEmpty) {
-      return const Center(
-        child: Text('조회된 배송 내역이 없습니다.'),
-      );
+      return const Center(child: Text('조회된 배송 내역이 없습니다.'));
     }
 
     return ListView.builder(
@@ -319,18 +266,14 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
       itemBuilder: (context, index) {
         final delivery = deliveries[index];
 
-        final isSelected =
-            state.selectedDeliveryId == delivery.deliveryId;
+        final isSelected = state.selectedDeliveryId == delivery.deliveryId;
 
         return ListTile(
           selected: isSelected,
           selectedTileColor: Colors.blue.withValues(alpha: 0.08),
           title: Text(
             delivery.deliveryId,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,9 +311,7 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: delivery == null
-            ? const Center(
-                child: Text('배송 목록에서 항목을 선택해 주세요.'),
-              )
+            ? const Center(child: Text('배송 목록에서 항목을 선택해 주세요.'))
             : SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -385,34 +326,13 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
                     const Divider(height: 28),
                     _detailRow('배송번호', delivery.deliveryId),
                     _detailRow('주문번호', delivery.orderId),
-                    _detailRow(
-                      '배송 순번',
-                      '${delivery.deliverySeq}',
-                    ),
-                    _detailRow(
-                      '배송업체',
-                      delivery.carrierName,
-                    ),
-                    _detailRow(
-                      '배송지',
-                      delivery.shippingAddress,
-                    ),
-                    _detailRow(
-                      '주문일',
-                      _formatDate(delivery.orderedAt),
-                    ),
-                    _detailRow(
-                      '배송 상태',
-                      delivery.statusText,
-                    ),
-                    _detailRow(
-                      '배송 시작일',
-                      _formatDate(delivery.shippedAt),
-                    ),
-                    _detailRow(
-                      '배송 완료일',
-                      _formatDate(delivery.arrivedAt),
-                    ),
+                    _detailRow('배송 순번', '${delivery.deliverySeq}'),
+                    _detailRow('배송업체', delivery.carrierName),
+                    _detailRow('배송지', delivery.shippingAddress),
+                    _detailRow('주문일', _formatDate(delivery.orderedAt)),
+                    _detailRow('배송 상태', delivery.statusText),
+                    _detailRow('배송 시작일', _formatDate(delivery.shippedAt)),
+                    _detailRow('배송 완료일', _formatDate(delivery.arrivedAt)),
                     const SizedBox(height: 24),
                     _buildActionButtons(state, delivery),
                   ],
@@ -438,33 +358,23 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
               ),
             ),
           ),
-          Expanded(
-            child: Text(value),
-          ),
+          Expanded(child: Text(value)),
         ],
       ),
     );
   }
 
   // 배송 시작 및 배송 완료 버튼
-  Widget _buildActionButtons(
-    DeliveryState state,
-    Delivery delivery,
-  ) {
+  Widget _buildActionButtons(DeliveryState state, Delivery delivery) {
     if (state.isProcessing) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (delivery.deliveryStatus == 'DELIVERED') {
       return const Center(
         child: Text(
           '배송이 완료된 건입니다.',
-          style: TextStyle(
-            color: Colors.green,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
         ),
       );
     }
@@ -477,9 +387,7 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
                 title: '배송 시작',
                 message: '선택한 배송을 시작하시겠습니까?',
                 onConfirm: () {
-                  return ref
-                      .read(deliveryProvider.notifier)
-                      .startDelivery();
+                  return ref.read(deliveryProvider.notifier).startDelivery();
                 },
               )
             : state.canCompleteDelivery
@@ -487,9 +395,7 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
                 title: '배송 완료',
                 message: '선택한 배송을 완료 처리하시겠습니까?',
                 onConfirm: () {
-                  return ref
-                      .read(deliveryProvider.notifier)
-                      .completeDelivery();
+                  return ref.read(deliveryProvider.notifier).completeDelivery();
                 },
               )
             : null,
@@ -498,11 +404,7 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
               ? Icons.local_shipping_outlined
               : Icons.check_circle_outline,
         ),
-        label: Text(
-          delivery.deliveryStatus == 'READY'
-              ? '배송 시작'
-              : '배송 완료',
-        ),
+        label: Text(delivery.deliveryStatus == 'READY' ? '배송 시작' : '배송 완료'),
       ),
     );
   }

@@ -11,6 +11,7 @@ import 'package:beauty_project/vm/customer/review_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/storage_catalog.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -170,6 +171,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ...storageCatalogOverrides(products),
             homeCatalogProductsProvider.overrideWithValue(AsyncData(products)),
             customerHttpClientProvider.overrideWithValue(client),
           ],

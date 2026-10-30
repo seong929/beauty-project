@@ -121,12 +121,13 @@ void main() {
         'phone': '010-1234-5678',
         'address': '서울시',
         'password': ' secret123 ',
+        'gender': 'F',
       });
       expect(
         customer.toForm(customerId: 'cus_generated')['customer_id'],
         'cus_generated',
       );
-      expect(customer.toForm().containsKey('gender'), isFalse);
+      expect(customer.toForm()['gender'], 'F');
       expect(customer.toForm().containsKey('points_balance'), isFalse);
       expect(customer.toForm().containsKey('account_status'), isFalse);
     },

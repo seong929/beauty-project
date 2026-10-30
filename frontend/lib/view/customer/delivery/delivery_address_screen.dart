@@ -27,16 +27,24 @@ class _CustomerDeliveryAddressScreenState
       final address = await showShippingAddressSheet(
         context,
         ShippingAddress(
-          recipient: customer.name,
-          phone: customer.phone,
+          recipient: order.recipient.isEmpty ? customer.name : order.recipient,
+          phone: order.phone.isEmpty ? customer.phone : order.phone,
           address: order.address,
+          deliveryRequest: order.deliveryRequest,
         ),
-        includeRecipient: false,
+        includeRequest: true,
       );
       if (address == null || !mounted) return;
       await ref
           .read(deliveryAddressHandlerProvider)
-          .save(customer.customerId, order.orderId, address.address);
+          .save(
+            customer.customerId,
+            order.orderId,
+            address.address,
+            recipient: address.recipient,
+            phone: address.phone,
+            deliveryRequest: address.deliveryRequest,
+          );
       if (!mounted ||
           ref.read(customerHandlerProvider).value?.customerId !=
               customer.customerId) {
@@ -61,7 +69,7 @@ class _CustomerDeliveryAddressScreenState
     final orders = ref.watch(deliveryOrdersProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('주문 배송지 변경'),
+        title: const Text('주문 배송 정보 변경'),
         actions: [
           IconButton(
             onPressed: _busy
@@ -94,7 +102,7 @@ class _CustomerDeliveryAddressScreenState
             : ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  const Text('출고 전인 주문의 배송 주소를 변경할 수 있습니다.'),
+                  const Text('출고 전 주문의 수령인·연락처·주소·배송 요청사항을 변경할 수 있습니다.'),
                   const SizedBox(height: 12),
                   for (final order in items)
                     Card(
@@ -110,11 +118,18 @@ class _CustomerDeliveryAddressScreenState
                               ),
                             ),
                             Text(order.statusLabel),
+                            if (order.recipient.isNotEmpty ||
+                                order.phone.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text('${order.recipient} ${order.phone}'),
+                            ],
                             const SizedBox(height: 10),
                             Text(
                               order.address,
                               key: Key('order-address-${order.orderId}'),
                             ),
+                            if (order.deliveryRequest.isNotEmpty)
+                              Text(order.deliveryRequest),
                             const SizedBox(height: 10),
                             OutlinedButton(
                               key: Key('change-order-address-${order.orderId}'),

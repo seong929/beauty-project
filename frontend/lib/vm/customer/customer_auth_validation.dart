@@ -39,7 +39,7 @@ class CustomerAuthValidation {
 
   static String? address(String? value) {
     final text = value?.trim() ?? '';
-    if (text.isEmpty || text.length > 100) return '주소를 100자 이내로 입력해 주세요.';
+    if (text.isEmpty || text.length > 500) return '주소를 500자 이내로 입력해 주세요.';
     return null;
   }
 
@@ -54,3 +54,5 @@ class CustomerAuthValidation {
     return null;
   }
 }
+
+// 변경 내용(2026-10-30): 주소 API 결과·상세주소 500자를 검증한다. 출생연도 검증은 제거했다.

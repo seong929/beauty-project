@@ -6,11 +6,17 @@ import 'package:beauty_project/vm/customer/checkout_flow_handler.dart';
 import 'package:beauty_project/vm/customer/checkout_handler.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
-import '../delivery/delivery_address_screen.dart';
 import '../product/product_widgets.dart';
 import 'checkout_widgets.dart';
 import 'complete_screen.dart';
 import 'list_screen.dart';
+import 'checkout_stock_widgets.dart';
+import 'package:beauty_project/vm/customer/checkout_stock_handler.dart';
+import 'package:beauty_project/vm/customer/product_handler.dart';
+import 'package:beauty_project/vm/customer/point_handler.dart';
+import '../delivery/shipping_address_sheet.dart';
+import 'checkout_points_widgets.dart';
+import 'package:beauty_project/vm/customer/checkout_points_handler.dart';
 
 class CustomerCheckoutScreen extends ConsumerStatefulWidget {
   const CustomerCheckoutScreen({super.key});
@@ -24,6 +30,17 @@ class _CustomerCheckoutScreenState
     extends ConsumerState<CustomerCheckoutScreen> {
   final _scroll = ScrollController();
   bool _submitting = false;
+  bool _editingAddress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (mounted && ref.read(selectedCartItemsProvider).isNotEmpty) {
+        ref.read(productHandlerProvider.notifier).refreshProducts();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -79,12 +96,43 @@ class _CustomerCheckoutScreenState
     }
   }
 
+  // Function: 이번 결제의 배송 정보만 변경한다. 회원 기본 정보는 수정하지 않는다.
+  Future<void> _changeShipping() async {
+    if (_submitting ||
+        _editingAddress ||
+        ref.read(customerPaymentProvider).isLoading) {
+      return;
+    }
+    final customerId = ref.read(customerHandlerProvider).value?.customerId;
+    if (customerId == null) return;
+    setState(() => _editingAddress = true);
+    try {
+      final address = await showShippingAddressSheet(
+        context,
+        ref.read(checkoutAddressProvider),
+      );
+      if (!mounted ||
+          address == null ||
+          ref.read(customerHandlerProvider).value?.customerId != customerId) {
+        return;
+      }
+      ref.read(checkoutAddressProvider.notifier).update(address);
+    } finally {
+      if (mounted) setState(() => _editingAddress = false);
+    }
+  }
+
   List<Widget> _information() {
     final customer = ref.watch(customerHandlerProvider).value;
     final address = ref.watch(checkoutAddressProvider);
     final items = ref.watch(selectedCartItemsProvider);
     final flow = ref.watch(checkoutFlowProvider);
     final handler = ref.read(checkoutFlowProvider.notifier);
+    final canChangeShipping =
+        customer != null &&
+        !_submitting &&
+        !_editingAddress &&
+        !ref.watch(customerPaymentProvider).isLoading;
     return [
       ExpansionTile(
         key: const Key('checkout-orderer'),
@@ -119,6 +167,11 @@ class _CustomerCheckoutScreenState
       const Divider(),
       CheckoutSection(
         title: '배송지 정보',
+        trailing: TextButton(
+          key: const Key('checkout-change-address'),
+          onPressed: canChangeShipping ? _changeShipping : null,
+          child: Text(_editingAddress ? '변경 중…' : '배송지 변경'),
+        ),
         children: [
           if (address?.isComplete == true) ...[
             Text(
@@ -196,7 +249,7 @@ class _CustomerCheckoutScreenState
           ],
           const SizedBox(height: 6),
           const Text(
-            '배송 요청사항은 현재 화면에만 유지되며 주문에는 저장되지 않습니다.',
+            '배송 요청사항은 주문의 배송 정보와 함께 저장됩니다.',
             style: TextStyle(fontSize: 11, color: CheckoutStyle.muted),
           ),
         ],
@@ -210,7 +263,8 @@ class _CustomerCheckoutScreenState
               padding: EdgeInsets.all(16),
               child: Text('결제할 상품이 없어요.'),
             ),
-          for (final item in items) CheckoutProductSummary(item: item),
+          for (final item in items)
+            CheckoutProductSummary(item: item, editQuantity: true),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
@@ -221,86 +275,40 @@ class _CustomerCheckoutScreenState
         ],
       ),
       TextButton(
-        key: const Key('checkout-existing-order-address'),
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const CustomerDeliveryAddressScreen(),
-          ),
-        ),
-        child: const Text('주문한 상품의 배송지 변경'),
+        key: const Key('checkout-order-shipping'),
+        onPressed: canChangeShipping ? _changeShipping : null,
+        child: const Text('주문 배송 정보 변경'),
       ),
     ];
   }
 
   List<Widget> _amount() {
-    final customer = ref.watch(customerHandlerProvider).value;
     final total = ref.watch(selectedCartTotalProvider);
+    final points = ref.watch(checkoutPointSummaryProvider);
     return [
       const CheckoutSection(
         title: '할인 금액',
         children: [CheckoutAmountRow('상품 할인', '0원')],
       ),
       const Divider(),
-      CheckoutSection(
-        title: '소담 포인트',
-        children: [
-          TextFormField(
-            key: const Key('checkout-points'),
-            enabled: false,
-            initialValue: '0',
-            style: const TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: CheckoutStyle.field,
-              suffixText: '사용 준비 중',
-              suffixStyle: const TextStyle(
-                fontSize: 12,
-                color: CheckoutStyle.muted,
-              ),
-              disabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const SizedBox(
-                width: 32,
-                height: 36,
-                child: Checkbox(value: false, onChanged: null),
-              ),
-              Expanded(
-                child: Text(
-                  '항상 포인트 사용 (준비 중) · 보유 ${customer?.pointsBalance ?? 0}P',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: CheckoutStyle.muted,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '포인트 사용은 현재 주문에 적용되지 않습니다.',
-            style: TextStyle(fontSize: 11, color: CheckoutStyle.muted),
-          ),
-        ],
-      ),
+      const CheckoutPointsSection(),
       const Divider(),
       CheckoutSection(
         title: '결제 금액 확인',
         children: [
           CheckoutAmountRow('상품 금액', productPrice(total)),
+          if (points.used > 0)
+            CheckoutAmountRow(
+              '포인트 사용',
+              '-${productPrice(points.used.toDouble())}',
+            ),
           const CheckoutAmountRow('배송비', '무료'),
           const SizedBox(height: 8),
           const Divider(),
           const SizedBox(height: 8),
           CheckoutAmountRow(
             '총 결제 금액',
-            productPrice(total),
+            productPrice(points.payable),
             key: const Key('checkout-total'),
             highlight: true,
           ),
@@ -312,17 +320,26 @@ class _CustomerCheckoutScreenState
   Widget _benefits({bool compact = false}) => CheckoutSection(
     title: '혜택 포인트',
     children: [
-      CheckoutAmountRow(compact ? '총 적립 예정' : '예상 적립', '준비 중'),
+      CheckoutAmountRow(
+        compact ? '총 적립 예정' : '예상 적립',
+        '${expectedPurchasePoints(ref.watch(checkoutPointSummaryProvider).payable)}P',
+      ),
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: compact ? CheckoutStyle.field : Colors.white,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Column(
+        child: Column(
           children: [
-            CheckoutAmountRow('구매 적립', '준비 중'),
-            CheckoutAmountRow('리뷰 적립', '준비 중'),
+            CheckoutAmountRow(
+              '구매 적립 (결제 금액의 10%)',
+              '${expectedPurchasePoints(ref.watch(checkoutPointSummaryProvider).payable)}P',
+            ),
+            const Text(
+              '포인트 차감 후 결제 금액 기준 · 소수점 이하 버림',
+              style: TextStyle(fontSize: 11, color: CheckoutStyle.muted),
+            ),
           ],
         ),
       ),
@@ -357,7 +374,7 @@ class _CustomerCheckoutScreenState
 
   List<Widget> _agreement(CheckoutFlowState flow) {
     final handler = ref.read(checkoutFlowProvider.notifier);
-    final total = ref.watch(selectedCartTotalProvider);
+    final points = ref.watch(checkoutPointSummaryProvider);
     return [
       CheckoutSection(
         title: '결제 수단',
@@ -420,13 +437,19 @@ class _CustomerCheckoutScreenState
           ),
           const SizedBox(height: 6),
           const Text(
-            '배송 요청사항은 주문에 저장되지 않습니다.',
+            '배송 요청사항은 주문의 배송 정보와 함께 저장됩니다.',
             style: TextStyle(fontSize: 11, color: CheckoutStyle.muted),
           ),
         ],
       ),
       const Divider(),
-      CheckoutAmountRow('총 결제 금액', productPrice(total), highlight: true),
+      if (points.used > 0)
+        CheckoutAmountRow('포인트 사용', '-${productPrice(points.used.toDouble())}'),
+      CheckoutAmountRow(
+        '총 결제 금액',
+        productPrice(points.payable),
+        highlight: true,
+      ),
       const SizedBox(height: 12),
       const Text(
         _paymentNotice,
@@ -444,12 +467,14 @@ class _CustomerCheckoutScreenState
         .reviewRequired;
     final address = ref.watch(checkoutAddressProvider);
     final items = ref.watch(selectedCartItemsProvider);
-    final total = ref.watch(selectedCartTotalProvider);
+    final points = ref.watch(checkoutPointSummaryProvider);
     final busy = payment.isLoading || _submitting;
     final ready =
         !busy &&
         !reviewRequired &&
         !ref.watch(cartPersistenceProvider).isLoading &&
+        ref.watch(checkoutStockProvider).canPurchase &&
+        points.canContinue &&
         ref.watch(customerHandlerProvider).value != null &&
         items.isNotEmpty &&
         flow.deliveryRequestValid &&
@@ -464,9 +489,9 @@ class _CustomerCheckoutScreenState
         ? '주문 처리 중…'
         : switch (flow.step) {
             CheckoutStep.information => '다음',
-            CheckoutStep.amount => '${productPrice(total)} · 다음',
+            CheckoutStep.amount => '${productPrice(points.payable)} · 다음',
             CheckoutStep.method => '주문 내용 확인',
-            CheckoutStep.agreement => '${productPrice(total)} 결제하기',
+            CheckoutStep.agreement => '${productPrice(points.payable)} 결제하기',
           };
     final content = switch (flow.step) {
       CheckoutStep.information => _information(),
@@ -547,6 +572,7 @@ class _CustomerCheckoutScreenState
                   key: Key('checkout-step-${flow.step.index}'),
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
                   children: [
+                    const CheckoutStockNotice(),
                     ...content,
                     if (payment.hasError) ...[
                       const SizedBox(height: 16),
@@ -578,3 +604,5 @@ class _CustomerCheckoutScreenState
     );
   }
 }
+
+// 변경 내용(2026-10-30): 결제 진입 시 재고를 갱신하고 주문 상품의 수량 변경·재고 부족 표시·결제 차단을 연결한다.

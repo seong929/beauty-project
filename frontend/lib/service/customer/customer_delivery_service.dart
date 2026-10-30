@@ -79,6 +79,9 @@ class CustomerDeliveryService {
         orderId: id,
         status: row['order_status'] as String,
         address: row['shipping_address'] as String,
+        recipient: row['shipping_recipient']?.toString() ?? '',
+        phone: row['shipping_phone']?.toString() ?? '',
+        deliveryRequest: row['delivery_request']?.toString() ?? '',
         hasDelivery:
             row['delivery_id'] != null || orders[id]?.hasDelivery == true,
       );
@@ -89,8 +92,11 @@ class CustomerDeliveryService {
   Future<String> updateAddress(
     String customerId,
     String orderId,
-    String address,
-  ) async {
+    String address, {
+    String? recipient,
+    String? phone,
+    String? deliveryRequest,
+  }) async {
     final data = await _request(
       () => client.put(
         baseUrl.resolve('customer_delivery_update'),
@@ -102,13 +108,21 @@ class CustomerDeliveryService {
           'customer_id': customerId,
           'order_id': orderId,
           'shipping_address': address.trim(),
+          if (recipient != null) 'shipping_recipient': recipient.trim(),
+          if (phone != null) 'shipping_phone': phone.trim(),
+          if (deliveryRequest != null)
+            'delivery_request': deliveryRequest.trim(),
         }),
       ),
     );
     if (data['result'] != 'OK' ||
         data['order_id'] != orderId ||
         data['customer_id'] != customerId ||
-        data['shipping_address'] != address.trim()) {
+        data['shipping_address'] != address.trim() ||
+        (recipient != null && data['shipping_recipient'] != recipient.trim()) ||
+        (phone != null && data['shipping_phone'] != phone.trim()) ||
+        (deliveryRequest != null &&
+            data['delivery_request'] != deliveryRequest.trim())) {
       throw const CustomerAuthException('배송지 저장 결과를 확인할 수 없습니다. 다시 조회해 주세요.');
     }
     return data['shipping_address'] as String;

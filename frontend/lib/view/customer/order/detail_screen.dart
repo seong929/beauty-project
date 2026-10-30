@@ -15,6 +15,7 @@ import '../return/return_request_screen.dart';
 import '../return/return_status_screen.dart';
 import 'order_history_widgets.dart';
 import 'order_summary.dart';
+import 'order_cancel_button.dart';
 
 class CustomerOrderDetailScreen extends ConsumerWidget {
   const CustomerOrderDetailScreen({super.key, required this.order, this.item});
@@ -62,6 +63,16 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
               .toList();
     final purchaseIds = purchaseItems.map((entry) => entry.id).toList();
     final shipments = ref.watch(deliveryRecordsProvider(current.id));
+    final canCancel =
+        current.status == 'PAID' &&
+        response.hasValue &&
+        !response.isLoading &&
+        !response.hasError &&
+        shipments.hasValue &&
+        !shipments.isLoading &&
+        !shipments.hasError &&
+        !shipments.value!.any((entry) => entry.id != null) &&
+        current.items.every((entry) => entry.deliveryId == null);
     final returns = ref.watch(customerReturnsProvider(null));
     final eligible =
         selected != null &&
@@ -218,6 +229,14 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
                 bold: true,
               ),
               const OrderInformationRow('배송비', '무료'),
+              if (current.usedPoints > 0) ...[
+                OrderInformationRow('사용 포인트', '${current.usedPoints}P'),
+                OrderInformationRow(
+                  '총 결제 금액',
+                  productPrice(current.paymentAmount),
+                  bold: true,
+                ),
+              ],
               OrderInformationRow('배송 주소', current.address),
               if (changedAt != null)
                 OrderInformationRow(
@@ -254,6 +273,8 @@ class CustomerOrderDetailScreen extends ConsumerWidget {
                 ),
                 child: const Text('배송 주소 변경'),
               ),
+              const SizedBox(height: 8),
+              OrderCancelButton(order: current, canCancel: canCancel),
               if (returns.hasError)
                 TextButton(
                   onPressed: () =>

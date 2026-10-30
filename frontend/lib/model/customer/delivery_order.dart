@@ -4,12 +4,18 @@ class DeliveryOrder {
     required this.status,
     required this.address,
     required this.hasDelivery,
+    this.recipient = '',
+    this.phone = '',
+    this.deliveryRequest = '',
   });
 
   final String orderId;
   final String status;
   final String address;
   final bool hasDelivery;
+  final String recipient;
+  final String phone;
+  final String deliveryRequest;
 
   bool get canChangeAddress =>
       !hasDelivery && const {'PENDING', 'PAID', 'PREPARING'}.contains(status);

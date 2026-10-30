@@ -86,6 +86,37 @@ class CustomerAuthService {
     return generatedId;
   }
 
+  Future<bool> isLoginIdAvailable(String loginId) async {
+    final value = loginId.trim();
+    try {
+      final response = await client
+          .get(
+            baseUrl
+                .resolve('customer_login_id_available')
+                .replace(queryParameters: {'login_id': value}),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(timeout);
+      if (response.statusCode != 200) {
+        throw const CustomerAuthException('아이디를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (data is! Map ||
+          data['result'] != 'OK' ||
+          data['login_id'] != value ||
+          data['available'] is! bool) {
+        throw const FormatException();
+      }
+      return data['available'] as bool;
+    } on TimeoutException {
+      throw const CustomerAuthException('아이디 확인 시간이 초과됐어요. 다시 시도해 주세요.');
+    } on http.ClientException {
+      throw const CustomerAuthException('네트워크 연결을 확인하고 다시 시도해 주세요.');
+    } on FormatException {
+      throw const CustomerAuthException('아이디 확인 응답을 확인할 수 없습니다.');
+    }
+  }
+
   Future<Map<String, dynamic>> _post(
     Map<String, String> form, {
     String path = 'customer_upload',
@@ -124,3 +155,5 @@ class CustomerAuthService {
     }
   }
 }
+
+// 변경 내용(2026-10-30): 개인정보 목록 조회 없이 전용 API로 아이디 중복을 확인한다.

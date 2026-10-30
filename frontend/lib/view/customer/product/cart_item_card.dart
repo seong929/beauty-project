@@ -7,6 +7,7 @@ import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/cart_persistence_handler.dart';
 import '../login/customer_auth_widgets.dart';
 import 'product_widgets.dart';
+import 'package:beauty_project/vm/customer/checkout_stock_handler.dart';
 
 class CartItemCard extends ConsumerWidget {
   const CartItemCard({
@@ -80,7 +81,7 @@ class CartItemCard extends ConsumerWidget {
               ),
               Expanded(
                 child: Text(
-                  item.product.brand,
+                  customerBrandText(item.product.brand),
                   style: const TextStyle(fontSize: 10, color: SodamStyle.muted),
                 ),
               ),
@@ -123,6 +124,13 @@ class CartItemCard extends ConsumerWidget {
                       color: SodamStyle.muted,
                     ),
                   ),
+                  if (ref.watch(checkoutStockProvider).byItem[item.key]
+                      case final issue?)
+                    Text(
+                      issue.message,
+                      key: ValueKey('cart-stock-${item.key}'),
+                      style: const TextStyle(fontSize: 11, color: Colors.red),
+                    ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -137,31 +145,9 @@ class CartItemCard extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      IconButton(
-                        key: ValueKey('decrease-${item.key}'),
-                        tooltip: '수량 줄이기',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: item.quantity <= 1
-                            ? null
-                            : () => ref
-                                  .read(cartHandlerProvider.notifier)
-                                  .setQuantity(item.key, item.quantity - 1),
-                        icon: const Icon(Icons.remove, size: 16),
-                      ),
                       Text(
-                        '${item.quantity}',
+                        '${item.quantity}개',
                         style: const TextStyle(fontSize: 12),
-                      ),
-                      IconButton(
-                        key: ValueKey('increase-${item.key}'),
-                        tooltip: '수량 늘리기',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: item.quantity >= 99
-                            ? null
-                            : () => ref
-                                  .read(cartHandlerProvider.notifier)
-                                  .setQuantity(item.key, item.quantity + 1),
-                        icon: const Icon(Icons.add, size: 16),
                       ),
                     ],
                   ),
@@ -189,3 +175,5 @@ class CartItemCard extends ConsumerWidget {
     ),
   );
 }
+
+// 변경 내용(2026-10-30): 장바구니의 수량 조절 버튼을 제거했다. 수량은 결제 화면에서 변경한다.

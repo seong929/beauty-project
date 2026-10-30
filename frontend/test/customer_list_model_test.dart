@@ -81,7 +81,7 @@ void main() {
         requests.add(request.method);
         if (request.method == 'POST') {
           expect(request.url.path, '/customer_upload');
-          expect(request.bodyFields, hasLength(7));
+          expect(request.bodyFields, hasLength(8));
           expect(request.bodyFields['password'], ' secret123 ');
           return jsonResponse({
             'result': 'OK',
@@ -113,6 +113,7 @@ void main() {
           'email': 'sodam@example.com',
           'address': '서울시',
           'phone': '01012345678',
+          'gender': 'UNDISCLOSED',
         });
         return jsonResponse({'result': 'OK'});
       }

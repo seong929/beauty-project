@@ -6,6 +6,7 @@ import 'package:beauty_project/model/customer/customers.dart';
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/vm/customer/cart_persistence_handler.dart';
 import 'support/preview_catalog.dart';
+import 'support/preview_storage.dart';
 import 'package:beauty_project/view/customer/home_screen.dart';
 import 'package:beauty_project/view/customer/login/customer_auth_widgets.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
@@ -91,6 +92,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...previewStorageOverrides,
           homeCatalogProductsProvider.overrideWithValue(
             AsyncData(homePreviewProducts),
           ),
@@ -135,7 +137,10 @@ void main() {
       await tester.tap(find.byKey(const Key('product-preview_1:30ml')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('product-detail-screen')), findsOneWidget);
-      expect(find.text('상품명·가격·옵션은 화면 구성을 위한 예시입니다.'), findsOneWidget);
+      expect(
+        find.text('표시된 용량과 가격은 임시 데이터입니다. 판매 정보 등록 후 구매할 수 있어요.'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -255,14 +260,14 @@ void main() {
       await tester.tap(firstImage);
       await tester.pumpAndSettle();
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      expect(find.text('상품 이미지 1 / 10'), findsOneWidget);
+      expect(find.text('상품 이미지 1 / 30'), findsOneWidget);
       expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
       await tester.tap(find.byTooltip('이미지 닫기'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('home-view-all-images')));
       await tester.tap(find.byKey(const Key('home-view-all-images')));
       await tester.pumpAndSettle();
-      expect(find.text('상품 이미지 10개'), findsOneWidget);
+      expect(find.text('상품 이미지 30개'), findsOneWidget);
       final gallery = find.descendant(
         of: find.byKey(const Key('all-product-images')),
         matching: find.byType(Scrollable),
@@ -275,7 +280,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('uploaded-product-10')));
       await tester.pumpAndSettle();
-      expect(find.text('상품 이미지 10 / 10'), findsOneWidget);
+      expect(find.text('상품 이미지 10 / 30'), findsOneWidget);
       expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
       expect(tester.takeException(), isNull);
     },

@@ -24,7 +24,7 @@ class CustomerLoginTests(unittest.TestCase):
             "customer_id": "cus_1", "login_id": "sodam",
             "password_hash": self.password_hash, "customer_name": "소담고객",
             "email": "sodam@example.com", "address": "서울시",
-            "phone": "01012345678", "gender": "UNDISCLOSED", "points_balance": 0,
+            "phone": "01012345678", "gender": "UNDISCLOSED", "points_balance": 0, "birth_year": 1997,
         }
         self.cursor.fetchone.side_effect = [self.profile, {"account_status": "ACTIVE"}]
         self.connection_patch = patch.object(customer, "get_connection", return_value=self.conn)
@@ -47,10 +47,11 @@ class CustomerLoginTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["result"], "OK")
         self.assertEqual(body["customer"], {
-            key: value for key, value in self.profile.items() if key != "password_hash"
+            key: value for key, value in self.profile.items() if key not in ("password_hash", "birth_year")
         } | {"account_status": "ACTIVE"})
         self.assertNotIn(self.password_hash, response.text)
         self.assertNotIn("password", body["customer"])
+        self.assertNotIn("birth_year", body["customer"])
         self.conn.close.assert_called_once()
         self.conn.commit.assert_not_called()
 

@@ -18,11 +18,13 @@ class CosmeticImagePicker extends ConsumerWidget {
     required this.selected,
     required this.onChanged,
     this.cosmeticId,
+    this.cosmeticName = '',
     this.enabled = true,
   });
   final SelectedCosmeticImage? selected;
   final ValueChanged<SelectedCosmeticImage?> onChanged;
   final String? cosmeticId;
+  final String cosmeticName;
   final bool enabled;
 
   @override
@@ -39,6 +41,7 @@ class CosmeticImagePicker extends ConsumerWidget {
       else
         CosmeticImage(
           cosmeticIds: cosmeticId == null ? const [] : [cosmeticId!],
+          cosmeticName: cosmeticName,
           size: 160,
         ),
       const SizedBox(height: 8),
@@ -94,3 +97,5 @@ class CosmeticImagePicker extends ConsumerWidget {
     ],
   );
 }
+
+// 변경 내용(2026-10-30): 상품명을 전달해 고객 화면과 같은 이미지 연결 기준으로 기존 사진을 표시한다.

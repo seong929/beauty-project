@@ -133,6 +133,10 @@ CREATE TABLE orders (
                    NOT NULL DEFAULT 'PENDING' COMMENT '주문 상태',
   ordered_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '주문 일시',
   shipping_address VARCHAR(500) NOT NULL COMMENT '배송지 주소',
+  shipping_recipient VARCHAR(100) NULL COMMENT '주문 수령인',
+  shipping_phone VARCHAR(30) NULL COMMENT '주문 수령인 연락처',
+  delivery_request VARCHAR(200) NOT NULL DEFAULT '' COMMENT '배송 요청사항',
+  used_points INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '주문 결제에 사용한 포인트',
   PRIMARY KEY (order_id),
   UNIQUE KEY uq_orders_seq (order_seq),
   CONSTRAINT chk_orders_seq CHECK (order_seq > 0),
@@ -507,3 +511,24 @@ CREATE TABLE id_counters (
   last_value BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (scope_name)
 ) ENGINE=InnoDB COMMENT='범위별 순번 할당기: 직원/화장품/품의/발주/입고 등';
+
+
+-- 고객 결제 10% 적립·주문 취소 회수 내역. 기존 잔액과 과거 주문은 변경하지 않는다.
+CREATE TABLE IF NOT EXISTS customer_point_history (
+  point_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  customer_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  order_id VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  event_type ENUM('EARN','CANCEL','USE','RESTORE') NOT NULL,
+  points_delta BIGINT NOT NULL,
+  balance_after INT UNSIGNED NOT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (point_id),
+  UNIQUE KEY uq_customer_points_order_event (order_id, event_type),
+  KEY ix_customer_points_history (customer_id, created_at),
+  CONSTRAINT fk_customer_points_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+  CONSTRAINT fk_customer_points_order FOREIGN KEY (order_id) REFERENCES orders(order_id),
+  CONSTRAINT chk_customer_points_delta CHECK (
+    (event_type IN ('EARN','RESTORE') AND points_delta>0)
+    OR (event_type IN ('CANCEL','USE') AND points_delta<0)
+  )
+) ENGINE=InnoDB COMMENT='고객 포인트 적립·회수 내역';

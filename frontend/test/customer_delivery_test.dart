@@ -10,6 +10,7 @@ import 'package:beauty_project/view/customer/mypage/profile_edit_screen.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/customer_providers.dart';
 import 'package:beauty_project/vm/customer/delivery_handler.dart';
+import 'package:beauty_project/vm/customer/checkout_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -227,10 +228,57 @@ void main() {
     );
   });
 
+  for (final entry in ['checkout-change-address', 'checkout-order-shipping']) {
+    testWidgets(
+      'checkout edits shipping through $entry without changing the customer profile',
+      (tester) async {
+        final scope = await pump(tester);
+        await tester.ensureVisible(find.byKey(Key(entry)));
+        expect(find.text('주문 배송 정보 변경'), findsOneWidget);
+        expect(find.text('결제 완료 주문의 배송 정보 변경'), findsNothing);
+        await tester.tap(find.byKey(Key(entry)));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('shipping-recipient')),
+          '다른 수령인',
+        );
+        await tester.enterText(
+          find.byKey(const Key('shipping-phone')),
+          '01099998888',
+        );
+        await tester.ensureVisible(
+          find.byKey(const Key('search-shipping-address')),
+        );
+        await tester.tap(find.byKey(const Key('search-shipping-address')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('shipping-address-detail')),
+          '303호',
+        );
+        await tester.ensureVisible(
+          find.byKey(const Key('save-shipping-address')),
+        );
+        await tester.tap(find.byKey(const Key('save-shipping-address')));
+        await tester.pumpAndSettle();
+        final shipping = scope.read(checkoutAddressProvider)!;
+        expect(shipping.recipient, '다른 수령인');
+        expect(shipping.phone, '01099998888');
+        expect(shipping.address, '(04524) 서울 중구 세종대로 110 303호');
+        expect(find.text('다른 수령인 01099998888'), findsOneWidget);
+        expect(scope.read(customerHandlerProvider).value!.name, '소담고객');
+        expect(scope.read(customerHandlerProvider).value!.address, '서울시 기존 주소');
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'existing order address saves through the API and reloads from the server',
     (tester) async {
       var stored = '서울시 주문 주소';
+      var recipient = '기존 수령인';
+      var phone = '01012345678';
+      var memo = '';
       var reads = 0;
       var writes = 0;
       final client = MockClient((request) async {
@@ -238,7 +286,12 @@ void main() {
           reads++;
           return _json({
             'result': [
-              _order(address: stored),
+              {
+                ..._order(address: stored),
+                'shipping_recipient': recipient,
+                'shipping_phone': phone,
+                'delivery_request': memo,
+              },
               _order(id: 'ord_2', status: 'SHIPPED'),
             ],
           });
@@ -246,13 +299,16 @@ void main() {
         writes++;
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         stored = body['shipping_address'] as String;
+        recipient = body['shipping_recipient'] as String;
+        phone = body['shipping_phone'] as String;
+        memo = body['delivery_request'] as String;
         return _json({'result': 'OK', ...body});
       });
-      final container = await pump(tester, client: client);
-      await tester.tap(
-        find.byKey(const Key('checkout-existing-order-address')),
+      final container = await pump(
+        tester,
+        client: client,
+        home: const CustomerDeliveryAddressScreen(),
       );
-      await tester.pumpAndSettle();
       expect(
         tester
             .widget<OutlinedButton>(
@@ -263,7 +319,23 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('change-order-address-ord_1')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('shipping-recipient')), findsNothing);
+      expect(find.byKey(const Key('shipping-recipient')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('shipping-recipient')),
+        '배송 수령인',
+      );
+      await tester.enterText(
+        find.byKey(const Key('shipping-phone')),
+        '01055556666',
+      );
+      await tester.ensureVisible(find.byKey(const Key('shipping-request')));
+      await tester.enterText(
+        find.byKey(const Key('shipping-request')),
+        '배송 전에 연락해 주세요.',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('search-shipping-address')),
+      );
       await tester.tap(find.byKey(const Key('search-shipping-address')));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -278,6 +350,8 @@ void main() {
       expect(writes, 1);
       expect(reads, 2);
       expect(find.text('(04524) 서울 중구 세종대로 110 303호'), findsOneWidget);
+      expect(find.text('배송 수령인 01055556666'), findsOneWidget);
+      expect(find.text('배송 전에 연락해 주세요.'), findsOneWidget);
       expect(
         container.read(customerHandlerProvider).value!.address,
         '서울시 기존 주소',

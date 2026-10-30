@@ -69,12 +69,8 @@ class OrderProductInformation extends ConsumerWidget {
           SizedBox(
             width: 82,
             child: product == null
-                ? Container(
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF6F7F8),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                ? AspectRatio(
+                    aspectRatio: 1,
                     child: const Icon(
                       Icons.spa_outlined,
                       color: SodamStyle.muted,
@@ -90,7 +86,7 @@ class OrderProductInformation extends ConsumerWidget {
               children: [
                 if (product != null && product.brand.isNotEmpty)
                   Text(
-                    product.brand,
+                    customerBrandText(product.brand),
                     style: const TextStyle(
                       fontSize: 11,
                       color: SodamStyle.muted,

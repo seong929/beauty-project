@@ -16,12 +16,45 @@ class CustomerOrderService {
   final http.Client client;
   final Uri baseUrl;
 
+  // Function: 주문 전체를 취소한다. 재고·포인트 복원은 서버의 한 트랜잭션에서 처리한다.
+  Future<void> cancel(String customerId, String orderId) async {
+    try {
+      final data = await _request(
+        () => client.post(
+          baseUrl
+              .resolve('orders_cancel')
+              .replace(
+                queryParameters: {
+                  'customer_id': customerId,
+                  'order_id': orderId,
+                },
+              ),
+        ),
+        payment: true,
+      );
+      if (data['result'] != 'OK' ||
+          data['order_id'] != orderId ||
+          data['order_status'] != 'CANCELLED') {
+        throw const OrderResultUncertain();
+      }
+    } on OrderResultUncertain {
+      throw const CustomerAuthException(
+        '주문 취소 결과를 확인하지 못했습니다. 구매 내역을 새로고침해 주세요.',
+      );
+    }
+  }
+
   Future<CustomerOrder> pay(
     String customerId,
     String address,
-    List<CustomerCartItem> items,
-  ) async {
-    if (items.isEmpty ||
+    List<CustomerCartItem> items, {
+    String? recipient,
+    String? phone,
+    String? deliveryRequest,
+    int pointsToUse = 0,
+  }) async {
+    if (pointsToUse < 0 ||
+        items.isEmpty ||
         address.trim().isEmpty ||
         address.trim().length > 500 ||
         items.any(
@@ -51,6 +84,11 @@ class CustomerOrderService {
         body: jsonEncode({
           'customer_id': customerId,
           'shipping_address': address.trim(),
+          if (recipient != null) 'shipping_recipient': recipient.trim(),
+          if (phone != null) 'shipping_phone': phone.trim(),
+          if (deliveryRequest != null)
+            'delivery_request': deliveryRequest.trim(),
+          if (pointsToUse > 0) 'points_to_use': pointsToUse,
           'items': [
             for (final entry in quantities.entries)
               {
@@ -89,6 +127,15 @@ class CustomerOrderService {
         throw const FormatException();
       }
       final total = _amount(data['total_amount']);
+      final usedPoints = _points(data['used_points'] ?? 0);
+      if (usedPoints != pointsToUse ||
+          usedPoints > total ||
+          (pointsToUse > 0 && data['payment_amount'] == null) ||
+          (data['payment_amount'] != null &&
+              (_amount(data['payment_amount']) - (total - usedPoints)).abs() >
+                  .001)) {
+        throw const FormatException();
+      }
       if ((total - lines.fold<double>(0, (sum, item) => sum + item.total))
               .abs() >
           0.01) {
@@ -99,8 +146,16 @@ class CustomerOrderService {
         customerId: customerId,
         status: 'PAID',
         address: data['shipping_address'],
+        recipient: data['shipping_recipient']?.toString() ?? recipient ?? '',
+        phone: data['shipping_phone']?.toString() ?? phone ?? '',
+        deliveryRequest:
+            data['delivery_request']?.toString() ?? deliveryRequest ?? '',
         total: total,
+        usedPoints: usedPoints,
         items: List.unmodifiable(lines),
+        earnedPoints:
+            int.tryParse(data['earned_points']?.toString() ?? '') ?? 0,
+        pointsBalance: int.tryParse(data['points_balance']?.toString() ?? ''),
       );
     } on FormatException {
       throw const OrderResultUncertain();
@@ -155,16 +210,27 @@ class CustomerOrderService {
         lines[line.id] = line;
       }
     }
+    final total = first['order_total_amount'] == null
+        ? lines.values.fold<double>(0, (sum, item) => sum + item.total)
+        : _amount(first['order_total_amount']);
+    final usedPoints = _points(first['used_points'] ?? 0);
+    if (usedPoints > total) throw const FormatException();
     return CustomerOrder(
       id: id,
       customerId: customerId,
       status: first['order_status'],
       address: first['shipping_address'],
-      total: first['order_total_amount'] == null
-          ? lines.values.fold<double>(0, (sum, item) => sum + item.total)
-          : _amount(first['order_total_amount']),
+      recipient: first['shipping_recipient']?.toString() ?? '',
+      phone: first['shipping_phone']?.toString() ?? '',
+      deliveryRequest: first['delivery_request']?.toString() ?? '',
+      total: total,
+      usedPoints: usedPoints,
       orderedAt: DateTime.tryParse(first['order_date']?.toString() ?? ''),
       items: List.unmodifiable(lines.values),
+      earnedPoints: lines.values.fold<int>(
+        0,
+        (sum, line) => sum + line.earnedPoints,
+      ),
     );
   }
 
@@ -186,7 +252,16 @@ class CustomerOrderService {
       unitPrice: _amount(row['unit_price']),
       saleOption: row['sale_option']?.toString() ?? 'NORMAL',
       deliveryId: row['delivery_id']?.toString(),
+      earnedPoints: int.tryParse(row['earned_points']?.toString() ?? '') ?? 0,
     );
+  }
+
+  int _points(dynamic value) {
+    final result = int.tryParse(value.toString());
+    if (result == null || result < 0 || result > 4294967295) {
+      throw const FormatException();
+    }
+    return result;
   }
 
   double _amount(dynamic value) {
