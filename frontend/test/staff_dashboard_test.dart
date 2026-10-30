@@ -1,4 +1,4 @@
-import 'package:beauty_project/main.dart';
+import 'package:beauty_project/app/admin_app.dart';
 import 'package:beauty_project/model/auth/employee_login.dart';
 import 'package:beauty_project/service/auth/auth_service.dart';
 import 'package:beauty_project/view/admin/delivery_page.dart';
@@ -56,7 +56,7 @@ void main() {
         .read(authProvider.notifier)
         .login(loginId: 'staff', password: 'password');
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const MyApp()),
+      UncontrolledProviderScope(container: container, child: const AdminApp()),
     );
     await tester.pumpAndSettle();
 

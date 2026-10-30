@@ -8,6 +8,7 @@ Future<ShippingAddress?> showShippingAddressSheet(
   BuildContext context,
   ShippingAddress? initial, {
   bool includeRecipient = true,
+  bool includeRequest = false,
 }) => showModalBottomSheet<ShippingAddress>(
   context: context,
   showDragHandle: true,
@@ -16,6 +17,7 @@ Future<ShippingAddress?> showShippingAddressSheet(
   builder: (_) => ShippingAddressSheet(
     initial: initial,
     includeRecipient: includeRecipient,
+    includeRequest: includeRequest,
   ),
 );
 
@@ -24,9 +26,11 @@ class ShippingAddressSheet extends ConsumerStatefulWidget {
     super.key,
     required this.initial,
     this.includeRecipient = true,
+    this.includeRequest = false,
   });
   final ShippingAddress? initial;
   final bool includeRecipient;
+  final bool includeRequest;
 
   @override
   ConsumerState<ShippingAddressSheet> createState() =>
@@ -43,6 +47,9 @@ class ShippingAddressSheetState extends ConsumerState<ShippingAddressSheet> {
     text: widget.initial?.address ?? '',
   );
   final _detail = TextEditingController();
+  late final _request = TextEditingController(
+    text: widget.initial?.deliveryRequest ?? '',
+  );
   bool _searching = false;
 
   String get _fullAddress => [
@@ -69,6 +76,7 @@ class ShippingAddressSheetState extends ConsumerState<ShippingAddressSheet> {
     _phone.dispose();
     _address.dispose();
     _detail.dispose();
+    _request.dispose();
     super.dispose();
   }
 
@@ -142,6 +150,16 @@ class ShippingAddressSheetState extends ConsumerState<ShippingAddressSheet> {
               textInputAction: TextInputAction.done,
             ),
             const SizedBox(height: 16),
+            if (widget.includeRequest) ...[
+              TextFormField(
+                key: const Key('shipping-request'),
+                controller: _request,
+                decoration: const InputDecoration(labelText: '배송 요청사항 (선택)'),
+                maxLength: 200,
+                maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+            ],
             FilledButton(
               key: const Key('save-shipping-address'),
               onPressed: () {
@@ -152,6 +170,7 @@ class ShippingAddressSheetState extends ConsumerState<ShippingAddressSheet> {
                     recipient: _recipient.text.trim(),
                     phone: _phone.text.trim(),
                     address: _fullAddress,
+                    deliveryRequest: _request.text.trim(),
                   ),
                 );
               },

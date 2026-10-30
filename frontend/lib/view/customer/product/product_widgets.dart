@@ -3,69 +3,87 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/vm/customer/cart_handler.dart';
-import 'package:beauty_project/vm/customer/product_search_handler.dart';
 import 'package:beauty_project/vm/customer/product_handler.dart';
 import 'package:beauty_project/vm/customer/review_handler.dart';
+import 'package:beauty_project/vm/customer/storage_image_handler.dart';
+import '../home/storage_product_image.dart';
 import '../login/customer_auth_widgets.dart';
 import '../mypage/mypage_screen.dart';
 import 'product_cart_screen.dart';
+import 'product_list.dart';
+import '../customer_navigation.dart';
 
 String productPrice(double price) =>
     '${price.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (match) => '${match[1]},')}원';
 
-class ProductPhoto extends StatelessWidget {
+class ProductPhoto extends ConsumerWidget {
   const ProductPhoto({super.key, required this.product, this.height = 180});
   final HomeProduct product;
   final double height;
 
   @override
-  Widget build(BuildContext context) => Container(
-    height: height,
-    width: double.infinity,
-    clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      color: const Color(0xFFF6F7F8),
-      borderRadius: BorderRadius.circular(7),
-    ),
-    padding: const EdgeInsets.all(12),
-    child: product.imageAsset.isEmpty
-        ? const Icon(Icons.spa_outlined, size: 40, color: SodamStyle.muted)
-        : Image.asset(
-            product.imageAsset,
-            fit: BoxFit.contain,
-            semanticLabel: product.name,
-            errorBuilder: (_, _, _) => const Icon(
-              Icons.broken_image_outlined,
-              color: SodamStyle.muted,
-            ),
-          ),
-  );
-}
-
-class ProductFavoriteButton extends ConsumerWidget {
-  const ProductFavoriteButton({
-    super.key,
-    required this.productId,
-    this.product,
-  });
-  final String productId;
-  final HomeProduct? product;
-
-  @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(favoriteProductsProvider).contains(productId);
-    return IconButton(
-      key: ValueKey('favorite-$productId'),
-      tooltip: selected ? '찜 해제' : '찜하기',
-      isSelected: selected,
-      onPressed: () => ref
-          .read(favoriteProductsProvider.notifier)
-          .toggle(productId, product: product),
-      icon: const Icon(Icons.favorite_border, size: 20),
-      selectedIcon: const Icon(
-        Icons.favorite,
-        size: 20,
-        color: Color(0xFFFF6383),
+    final remote = product.storageImage == null && product.isDatabaseProduct
+        ? ref
+              .watch(
+                customerProductImageProvider((
+                  id: product.id,
+                  name: product.name,
+                )),
+              )
+              .value
+        : null;
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: CustomerProductImageFrame(
+        child: product.storageImage != null
+            ? CustomerStoragePhoto(
+                image: product.storageImage!,
+                label: product.name,
+              )
+            : remote != null
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  CustomerStoragePhoto(
+                    image: remote.image,
+                    label: remote.isRepresentative
+                        ? '${product.name} 대표 이미지'
+                        : product.name,
+                  ),
+                  if (remote.isRepresentative)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        color: const Color(0xE6FFFFFF),
+                        child: const Text(
+                          '대표 이미지',
+                          style: TextStyle(
+                            fontSize: 8,
+                            color: SodamStyle.muted,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              )
+            : product.imageAsset.isEmpty
+            ? const Icon(Icons.spa_outlined, size: 40, color: SodamStyle.muted)
+            : Image.asset(
+                product.imageAsset,
+                fit: BoxFit.contain,
+                semanticLabel: product.name,
+                errorBuilder: (_, _, _) => const Icon(
+                  Icons.broken_image_outlined,
+                  color: SodamStyle.muted,
+                ),
+              ),
       ),
     );
   }
@@ -143,29 +161,10 @@ class ProductTile extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            children: [
-              ProductPhoto(product: product.product, height: photoHeight),
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Material(
-                  color: const Color(0xF5FFFFFF),
-                  shape: const CircleBorder(),
-                  child: SizedBox.square(
-                    dimension: 36,
-                    child: ProductFavoriteButton(
-                      productId: product.product.id,
-                      product: product.product,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          ProductPhoto(product: product.product, height: photoHeight),
           const SizedBox(height: 8),
           Text(
-            product.brand,
+            customerBrandText(product.brand),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 10, color: SodamStyle.muted),
@@ -224,11 +223,10 @@ void showCustomerPreviewCart(BuildContext context) {
   if (!context.mounted) return;
   if (ModalRoute.of(context)?.settings.name == 'customer-cart') return;
   ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
-  Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      settings: const RouteSettings(name: 'customer-cart'),
-      builder: (_) => const CustomerCartScreen(),
-    ),
+  openCustomerTab(
+    context,
+    name: 'customer-cart',
+    screen: const CustomerCartScreen(),
   );
 }
 
@@ -237,13 +235,18 @@ void showCustomerProductProfile(BuildContext context, WidgetRef ref) {
       ModalRoute.of(context)?.settings.name == 'customer-mypage') {
     return;
   }
-  Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      settings: const RouteSettings(name: 'customer-mypage'),
-      builder: (_) => const CustomerMyPageScreen(),
-    ),
+  openCustomerTab(
+    context,
+    name: 'customer-mypage',
+    screen: const CustomerMyPageScreen(),
   );
 }
+
+Future<void> showCustomerProductSearch(BuildContext context) => openCustomerTab(
+  context,
+  name: 'customer-search',
+  screen: const CustomerProductListScreen(),
+);
 
 class ProductNavigation extends ConsumerWidget {
   const ProductNavigation({
@@ -283,11 +286,13 @@ class ProductNavigation extends ConsumerWidget {
                     onTap: () {
                       switch (index) {
                         case 0:
-                          Navigator.of(
-                            context,
-                          ).popUntil((route) => route.isFirst);
+                          returnToCustomerHome(context);
                         case 1:
-                          onSearch();
+                          if (selectedIndex == 1) {
+                            onSearch();
+                          } else {
+                            showCustomerProductSearch(context);
+                          }
                         case 2:
                           if (onCart != null) {
                             onCart!();
@@ -336,3 +341,5 @@ class ProductNavigation extends ConsumerWidget {
     );
   }
 }
+
+// 변경 내용(2026-10-30): 상품 사진의 찜 버튼과 찜 위젯을 제거했다.

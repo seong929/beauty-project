@@ -81,7 +81,8 @@ class CustomerApiTests(unittest.TestCase):
         params = self.executed("INSERT INTO customers")[0][1]
         self.assertNotEqual(params[2], self.profile["password"])
         self.assertTrue(customer.password_hasher.verify(self.profile["password"], params[2]))
-        self.assertEqual(params[-1], self.profile["phone"])
+        self.assertEqual(params[6], self.profile["phone"])
+        self.assertEqual(params[7:], ('UNDISCLOSED',))
         self.assertEqual(self.executed("INSERT INTO customer_account_status_history")[0][1],
                          ("csh_10", "cus_1", "ACTIVE"))
         self.conn.commit.assert_called_once()
@@ -249,6 +250,7 @@ class CustomerApiTests(unittest.TestCase):
                 2,
                 Decimal("1234.50"),
                 "NORMAL",
+                246,
             ),
         )
 

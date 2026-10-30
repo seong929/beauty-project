@@ -50,19 +50,20 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDfcTu63z3i3xP8Oi6nFu4spks2O7sobEc',
-    appId: '1:772694796423:web:8d580a2077cbd9ef35f022',
-    messagingSenderId: '772694796423',
-    projectId: 'cosmetics-store-image-storage',
-    authDomain: 'cosmetics-store-image-storage.firebaseapp.com',
-    storageBucket: 'cosmetics-store-image-storage.firebasestorage.app',
+    apiKey: 'AIzaSyDPYiNCGdoa_HDwmYOMr9JmUnnkV8ThCls',
+    appId: '1:980679957418:web:3b82f8b31c479bc173a9d3',
+    messagingSenderId: '980679957418',
+    projectId: 'beauty-skin-20e94',
+    authDomain: 'beauty-skin-20e94.firebaseapp.com',
+    storageBucket: 'beauty-skin-20e94.firebasestorage.app',
+    measurementId: 'G-PXH875B5B5',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDUVV-f3uFFsOGATwFed2idyv7PwY-EsPE',
-    appId: '1:772694796423:android:196d3ece7393130235f022',
-    messagingSenderId: '772694796423',
-    projectId: 'cosmetics-store-image-storage',
-    storageBucket: 'cosmetics-store-image-storage.firebasestorage.app',
+    apiKey: 'AIzaSyBPvTulTLYyWeqYzJZYFqiFr9-ypI0s6fw',
+    appId: '1:980679957418:android:920918154d5446f473a9d3',
+    messagingSenderId: '980679957418',
+    projectId: 'beauty-skin-20e94',
+    storageBucket: 'beauty-skin-20e94.firebasestorage.app',
   );
 }

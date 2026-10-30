@@ -7,10 +7,12 @@ import 'package:beauty_project/vm/customer/product_handler.dart';
 import 'package:beauty_project/vm/customer/product_search_handler.dart';
 import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/review_handler.dart';
+import 'package:beauty_project/vm/customer/storage_image_handler.dart';
+import 'package:beauty_project/vm/customer/storage_product_handler.dart';
+import 'home/storage_product_tile.dart';
 import 'home/home_widgets.dart';
 import 'home/home_product_gallery.dart';
 import 'login/customer_auth_widgets.dart';
-import 'product/product_list.dart';
 import 'product/product_detail.dart';
 import 'product/product_widgets.dart';
 
@@ -41,9 +43,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
   Future<void> _openSearch() async {
     _searchFocus.unfocus();
     ref.read(recentProductSearchesProvider.notifier).add(_search.text);
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CustomerProductListScreen()),
-    );
+    await showCustomerProductSearch(context);
     if (mounted) _search.text = ref.read(productFilterProvider).query;
   }
 
@@ -167,7 +167,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
         toolbarHeight: 64,
         automaticallyImplyLeading: false,
         title: const Text(
-          '소담',
+          '하나',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,
@@ -196,8 +196,8 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
   Widget _buildHome() {
     final filters = ref.watch(productFilterProvider);
-    final products = ref.watch(homeProductVariantsProvider);
-    final catalog = ref.watch(homeCatalogProductsProvider);
+    final products = ref.watch(filteredStorageProductsProvider);
+    final catalog = ref.watch(storageProductsProvider);
     final categories = ref.watch(homeProductCategoriesProvider);
     final ratings = filters.sort == ProductSort.ratingHigh
         ? ref.watch(catalogProductRatingsProvider)
@@ -212,6 +212,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(catalogProductRatingsProvider);
+            ref.invalidate(customerStorageImagesProvider);
             await ref.read(productHandlerProvider.notifier).refreshProducts();
           },
           child: SingleChildScrollView(
@@ -221,18 +222,6 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  color: SodamStyle.field,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: const Text(
-                    '오늘의 뷰티를 소담에서 만나보세요',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, color: SodamStyle.muted),
-                  ),
-                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
                   child: Row(
@@ -251,7 +240,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                             onSubmitted: (_) => _openSearch(),
                             style: const TextStyle(fontSize: 12),
                             decoration: InputDecoration(
-                              hintText: '오늘, 어떤 뷰티 고민이 있나요?',
+                              hintText: '오늘, 어떤 피부 고민이 있나요?',
                               hintStyle: const TextStyle(
                                 fontSize: 12,
                                 color: homeMuted,
@@ -349,7 +338,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '오늘의 소담한 발견',
+                              '오늘의 추천 항목',
                               style: TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.w700,
@@ -389,7 +378,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '지금 만나는 뷰티',
+                              '지금 만나요',
                               style: TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.w700,
@@ -397,7 +386,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                             ),
                             SizedBox(height: 5),
                             Text(
-                              '등록된 상품의 가격과 용량입니다.',
+                              '스킨 · 로션 · 크림을 만나보세요.',
                               style: TextStyle(fontSize: 10, color: homeMuted),
                             ),
                           ],
@@ -429,7 +418,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                             Text(catalog.error.toString()),
                             TextButton(
                               onPressed: () =>
-                                  ref.invalidate(productHandlerProvider),
+                                  ref.invalidate(customerStorageImagesProvider),
                               child: const Text('다시 시도'),
                             ),
                           ],
@@ -465,11 +454,20 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                                     ),
                                   ),
                               itemBuilder: (_, index) => KeyedSubtree(
-                                key: ValueKey('product-${products[index].id}'),
-                                child: ProductTile(
+                                key: ValueKey(products[index].cardKey),
+                                child: StorageProductTile(
                                   product: products[index],
                                   photoHeight: height,
-                                  onTap: () => _showProduct(products[index]),
+                                  onTap: () {
+                                    final product = products[index];
+                                    final detail = product.detailProduct;
+                                    _showProduct(
+                                      HomeProductVariant(
+                                        product: detail,
+                                        option: detail.options.first,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             );

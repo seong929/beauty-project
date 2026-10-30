@@ -3,6 +3,7 @@ from fastapi import APIRouter, Query, HTTPException
 import logging
 import pymysql
 from database import get_connection
+from services.customer.point_service import change_points
 
 router = APIRouter(tags=["주문 관리"])
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ def cancel_paid_order(customer_id: str, order_id: str) -> dict:
         with conn.cursor() as cur:
             # 배송도 동일 주문 행을 먼저 잠가 결제/출고/취소를 직렬화한다.
             cur.execute(
-                """SELECT order_id, customer_id, order_status
+                """SELECT order_id, customer_id, order_status, used_points
                    FROM orders WHERE order_id = %s FOR UPDATE""",
                 (order_id,),
             )
@@ -36,7 +37,7 @@ def cancel_paid_order(customer_id: str, order_id: str) -> dict:
                 raise HTTPException(409, "배송 정보가 등록된 주문은 취소할 수 없습니다.")
 
             cur.execute(
-                """SELECT oi.order_item_id, oi.inventory_id, oi.purchase_quantity,
+                """SELECT oi.order_item_id, oi.inventory_id, oi.purchase_quantity, oi.earned_points,
                           so.outbound_quantity, so.delivery_id, so.outbound_on
                      FROM order_items AS oi
                      LEFT JOIN stock_outbounds AS so
@@ -55,6 +56,11 @@ def cancel_paid_order(customer_id: str, order_id: str) -> dict:
                         or int(item["outbound_quantity"]) != int(item["purchase_quantity"])):
                     raise HTTPException(409, "출고 예약 상태가 일치하지 않아 취소할 수 없습니다.")
 
+            recovered_points = sum(int(item.get('earned_points') or 0) for item in items)
+            restored_points = int(order.get('used_points') or 0)
+            # 사용한 포인트를 먼저 돌려준 뒤 이 주문에서 적립한 포인트를 회수한다.
+            change_points(cur, customer_id, order_id, restored_points, event='RESTORE')
+            change_points(cur, customer_id, order_id, -recovered_points)
             restored = 0
             for item in items:
                 quantity = int(item["purchase_quantity"])
@@ -90,6 +96,8 @@ def cancel_paid_order(customer_id: str, order_id: str) -> dict:
             "result": "OK", "order_id": order_id,
             "order_status": "CANCELLED", "restored_quantity": restored,
             "deleted_outbound_count": len(items),
+            "recovered_points": recovered_points,
+            "restored_points": restored_points,
         }
     except HTTPException:
         if conn is not None:

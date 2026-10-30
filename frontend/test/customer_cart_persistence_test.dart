@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'support/storage_catalog.dart';
 
 const customerId = 'cus_stored';
 const productId = 'mfr_1_cat_skin_1_1';
@@ -292,6 +293,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...storageCatalogOverrides([HomeProduct.fromCatalog(product)]),
           customerHandlerProvider.overrideWith(StoredCustomer.new),
           productHandlerProvider.overrideWith(StoredCatalog.new),
           customerHttpClientProvider.overrideWithValue(client),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../customer_brand.dart';
 import 'package:beauty_project/model/customer/cart_item.dart';
 import 'package:beauty_project/vm/customer/checkout_flow_handler.dart';
 import '../product/product_widgets.dart';
+import 'checkout_stock_widgets.dart';
 
 abstract final class CheckoutStyle {
   static const accent = Color(0xFF36C4CF);
@@ -134,8 +136,13 @@ class CheckoutAmountRow extends StatelessWidget {
 }
 
 class CheckoutProductSummary extends StatelessWidget {
-  const CheckoutProductSummary({super.key, required this.item});
+  const CheckoutProductSummary({
+    super.key,
+    required this.item,
+    this.editQuantity = false,
+  });
   final CustomerCartItem item;
+  final bool editQuantity;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -153,7 +160,7 @@ class CheckoutProductSummary extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                item.product.brand,
+                customerBrandText(item.product.brand),
                 style: const TextStyle(
                   fontSize: 11,
                   color: CheckoutStyle.muted,
@@ -183,6 +190,7 @@ class CheckoutProductSummary extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              if (editQuantity) CheckoutQuantityControl(item: item),
             ],
           ),
         ),
@@ -326,3 +334,5 @@ class CheckoutAgreementRow extends StatelessWidget {
     ],
   );
 }
+
+// 변경 내용(2026-10-30): 결제 첫 단계의 상품 요약에 재고 한도 내 수량 조절 위젯을 연결한다.

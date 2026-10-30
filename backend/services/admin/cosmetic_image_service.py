@@ -20,8 +20,8 @@ from google.api_core.exceptions import GoogleAPIError, NotFound, PreconditionFai
 from PIL import Image, UnidentifiedImageError
 from fastapi import HTTPException
 
-BUCKET_NAME = os.getenv('FIREBASE_STORAGE_BUCKET', 'cosmetics-store-image-storage.firebasestorage.app')
-PROJECT_ID = 'cosmetics-store-image-storage'
+BUCKET_NAME = os.getenv('FIREBASE_STORAGE_BUCKET', 'beauty-skin-20e94.firebasestorage.app')
+PROJECT_ID = os.getenv('FIREBASE_STORAGE_PROJECT', 'beauty-skin-20e94')
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _write_lock = threading.Lock()
 _credential_lock = threading.Lock()
@@ -136,3 +136,6 @@ def upload_image(cosmetic_id, content, filename='', overwrite=True):
         raise HTTPException(status_code=409, detail='다른 사용자가 이미지를 변경했습니다. 새로고침 후 다시 시도하세요.') from None
     except (GoogleAPIError, DefaultCredentialsError, subprocess.SubprocessError):
         raise HTTPException(status_code=503, detail='이미지 업로드에 실패했습니다. Firebase 인증과 저장소 상태를 확인하세요.') from None
+
+# 변경 내용(2026-10-30): 관리자 업로드·조회 기본 대상을 고객과 동일한 beauty-skin 저장소로 통일한다.
+# 업로드 인증·관리자 권한·기존 객체 경로와 덮어쓰기 충돌 검사는 유지한다.

@@ -48,6 +48,15 @@ class DeliveryAddressTests(unittest.TestCase):
                 self.cursor.fetchone.side_effect = [{"order_status": status}, None]
                 self.assertEqual(self.update().status_code, 200)
 
+    def test_order_contact_and_request_are_saved_without_updating_customer_profile(self):
+        response = self.update(shipping_recipient=' 새 수령인 ', shipping_phone='010-9876-5432', delivery_request='문 앞에 놓아주세요.')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['shipping_recipient'], '새 수령인')
+        self.assertEqual(response.json()['shipping_phone'], '010-9876-5432')
+        self.assertEqual(response.json()['delivery_request'], '문 앞에 놓아주세요.')
+        self.assertEqual(self.cursor.execute.call_args.args[1][1:4], ('새 수령인', '010-9876-5432', '문 앞에 놓아주세요.'))
+        self.assertFalse(any('UPDATE customers' in c.args[0] for c in self.cursor.execute.call_args_list))
+
     def test_another_customer_or_missing_order_is_not_updated(self):
         self.cursor.fetchone.side_effect = [None]
         self.assertEqual(self.update(customer_id="cus_other").status_code, 404)
@@ -76,7 +85,9 @@ class DeliveryAddressTests(unittest.TestCase):
 
     def test_invalid_input_never_reaches_database(self):
         for change in ({"shipping_address": "   "}, {"shipping_address": "가" * 501},
-                       {"customer_id": " "}, {"order_id": " "}, {"unexpected": True}):
+                       {"customer_id": " "}, {"order_id": " "}, {"unexpected": True},
+                       {'shipping_recipient': ' '}, {'shipping_phone': 'phone'},
+                       {'shipping_phone': '0101'}, {'delivery_request': '가' * 201}):
             with self.subTest(change=change):
                 self.assertEqual(self.update(**change).status_code, 422)
         delivery.get_connection.assert_not_called()

@@ -75,6 +75,7 @@ def customers_categories():
                         SUM(stock_quantity) AS available_quantity
                     FROM product_inventory
                     WHERE inventory_status = 'MAINTAIN'
+                    AND sale_option = 'NORMAL'
                     AND stock_quantity > 0
                     AND (
                         expires_on IS NULL
@@ -107,3 +108,6 @@ def customers_categories():
         return {"result": rows}
     finally:
         conn.close()
+
+# 변경 내용(2026-10-30): 고객 결제의 NORMAL 옵션과 같은 판매 재고만 집계한다.
+# 결제 API의 재고 잠금·최종 재고 부족 검사와 함께 사용한다.

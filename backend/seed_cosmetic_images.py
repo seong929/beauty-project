@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from database import get_connection
-from services.admin.cosmetic_image_service import upload_image, object_name
+from services.admin.cosmetic_image_service import BUCKET_NAME, upload_image, object_name
 
 
 def normalized(value):
@@ -72,9 +72,11 @@ def main():
                         entry['status'] = 'error'
                         entry['error'] = type(error).__name__
             entries.append(entry)
-    Path(args.report).write_text(json.dumps({'bucket': 'cosmetics-store-image-storage.firebasestorage.app', 'products': entries}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    Path(args.report).write_text(json.dumps({'bucket': BUCKET_NAME, 'products': entries}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({status: sum(e['status'] == status for e in entries) for status in ('planned','uploaded','existing','unmatched','error')}))
     if any(e['status'] == 'error' for e in entries): raise SystemExit(1)
 
 
 if __name__ == '__main__': main()
+
+# 변경 내용(2026-10-30): 업로드 서비스와 같은 버킷 이름을 결과 보고서에 기록한다.

@@ -10,6 +10,7 @@ import '../admin/cosmetic_create_page.dart';
 import 'cosmetic_option_detail_view.dart';
 import '../common/cosmetic_image.dart';
 import '../../vm/admin/management_vm.dart';
+import '../../vm/common/storage_image_handler.dart';
 import 'staff_inventory_batch_detail_view.dart';
 import 'staff_inventory_discard_view.dart';
 
@@ -70,6 +71,7 @@ class StaffInventoryView extends ConsumerWidget {
             onPressed: () {
               invalidateStaffInventoryLists(ref);
               ref.invalidate(cosmeticImageProvider);
+              ref.invalidate(storageImagesProvider);
               ref.read(cosmeticImagesRevisionProvider.notifier).refresh();
             },
           ),
@@ -326,7 +328,10 @@ class _CosmeticRow extends ConsumerWidget {
                     color: theme.colorScheme.primary,
                   ),
                   SizedBox(width: isTablet ? 18 : 12),
-                  CosmeticImage(cosmeticIds: cosmetic.cosmeticIds),
+                  CosmeticImage(
+                    cosmeticIds: cosmetic.cosmeticIds,
+                    cosmeticName: cosmetic.name,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: isTablet
@@ -510,7 +515,11 @@ class _OptionRow extends ConsumerWidget {
                     color: theme.colorScheme.secondary,
                   ),
                   SizedBox(width: isTablet ? 14 : 10),
-                  CosmeticImage(cosmeticIds: [option.cosmeticId], size: 48),
+                  CosmeticImage(
+                    cosmeticIds: [option.cosmeticId],
+                    cosmeticName: cosmeticName,
+                    size: 48,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: isTablet
@@ -1477,3 +1486,5 @@ class _Failed extends StatelessWidget {
     ),
   );
 }
+
+// 변경 내용(2026-10-30): 재고 목록도 공용 Firebase 상품 이미지를 사용하고 새로고침 시 재조회한다.

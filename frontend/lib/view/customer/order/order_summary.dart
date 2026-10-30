@@ -62,8 +62,17 @@ class CustomerOrderSummary extends StatelessWidget {
       _row('주문 상태', order.statusLabel),
       _row('상품 금액', productPrice(order.total)),
       _row('배송비', '0원'),
-      _row('총 주문 금액', productPrice(order.total), bold: true),
+      if (order.usedPoints > 0) _row('사용 포인트', '${order.usedPoints}P'),
+      _row('총 결제 금액', productPrice(order.paymentAmount), bold: true),
+      _row(
+        order.status == 'CANCELLED' ? '취소된 적립 포인트' : '적립 포인트 (10%)',
+        '${order.earnedPoints}P',
+      ),
       _row('배송 주소', order.address),
+      if (order.recipient.isNotEmpty) _row('수령인', order.recipient),
+      if (order.phone.isNotEmpty) _row('연락처', order.phone),
+      if (order.deliveryRequest.isNotEmpty)
+        _row('배송 요청사항', order.deliveryRequest),
       const Divider(height: 30),
       Text(
         '구매 상품 ${order.quantity}개',

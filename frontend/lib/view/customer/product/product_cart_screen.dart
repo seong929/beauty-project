@@ -159,7 +159,7 @@ class _CustomerCartScreenState extends ConsumerState<CustomerCartScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Text(
-                              '상품 담기·삭제는 서버에 저장됩니다. 기존 API에는 수량 저장 항목이 없어, 수량은 현재 앱에서만 유지되고 다시 로그인하면 1개로 표시됩니다.',
+                              '결제할 상품을 선택해 주세요. 상품 수량은 다음 주문/결제 페이지에서 변경할 수 있습니다.',
                               style: TextStyle(
                                 fontSize: 11,
                                 height: 1.8,
@@ -221,3 +221,5 @@ class _CustomerCartScreenState extends ConsumerState<CustomerCartScreen> {
     );
   }
 }
+
+// 변경 내용(2026-10-30): 장바구니는 선택·삭제 중심으로 유지하고 수량 변경은 결제 화면으로 이동했다.

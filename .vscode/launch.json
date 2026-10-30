@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "소담 고객",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/frontend",
+      "program": "${workspaceFolder}/frontend/lib/main_customer.dart"
+    },
+    {
+      "name": "소담 관리자",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/frontend",
+      "program": "${workspaceFolder}/frontend/lib/main_admin.dart"
+    },
+    {
+      "name": "소담 배송업체",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/frontend",
+      "program": "${workspaceFolder}/frontend/lib/main_delivery.dart"
+    }
+  ]
+}

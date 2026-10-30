@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/vm/customer/product_handler.dart';
 import 'package:beauty_project/vm/customer/product_search_handler.dart';
 import 'package:beauty_project/vm/customer/review_handler.dart';
+import 'package:beauty_project/vm/customer/storage_product_handler.dart';
+import 'package:beauty_project/vm/customer/storage_image_handler.dart';
+import '../home/storage_product_tile.dart';
 import '../login/customer_auth_widgets.dart';
 import 'product_detail.dart';
 import 'product_widgets.dart';
@@ -221,8 +224,8 @@ class _CustomerProductListScreenState
   @override
   Widget build(BuildContext context) {
     final filter = ref.watch(productFilterProvider);
-    final products = ref.watch(homeProductVariantsProvider);
-    final catalog = ref.watch(homeCatalogProductsProvider);
+    final products = ref.watch(filteredStorageProductsProvider);
+    final catalog = ref.watch(storageProductsProvider);
     final recent = ref.watch(recentProductSearchesProvider);
     final ratings = filter.sort == ProductSort.ratingHigh
         ? ref.watch(catalogProductRatingsProvider)
@@ -401,7 +404,7 @@ class _CustomerProductListScreenState
                       const SizedBox(height: 4),
                       const Center(
                         child: Text(
-                          '등록된 상품의 가격과 용량입니다.',
+                          '스킨 · 로션 · 크림 · 임시 가격·용량 포함',
                           style: TextStyle(
                             fontSize: 9,
                             color: SodamStyle.muted,
@@ -426,7 +429,7 @@ class _CustomerProductListScreenState
                         Text(catalog.error.toString()),
                         TextButton(
                           onPressed: () =>
-                              ref.invalidate(productHandlerProvider),
+                              ref.invalidate(customerStorageImagesProvider),
                           child: const Text('다시 시도'),
                         ),
                       ],
@@ -483,15 +486,18 @@ class _CustomerProductListScreenState
                           ),
                         ),
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) => ProductTile(
+                          (context, index) => StorageProductTile(
                             product: products[index],
                             photoHeight: height,
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => CustomerProductDetailScreen(
-                                  product: products[index].product,
-                                  option: products[index].option,
+                                  product: products[index].detailProduct,
+                                  option: products[index]
+                                      .detailProduct
+                                      .options
+                                      .first,
                                   fromSearch: true,
                                 ),
                               ),

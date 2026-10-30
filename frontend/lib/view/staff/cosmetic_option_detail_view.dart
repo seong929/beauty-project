@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../vm/admin/management_vm.dart';
+import '../../vm/common/storage_image_handler.dart';
 import '../../vm/auth/auth_notifier.dart';
 import '../common/cosmetic_image_picker.dart';
 import '../common/cosmetic_image.dart';
@@ -21,7 +22,12 @@ class CosmeticOptionDetailView extends ConsumerWidget {
             tooltip: '새로고침',
             onPressed: ref.watch(managementActionsProvider)
                 ? null
-                : () => ref.invalidate(cosmeticDetailsProvider(cosmeticId)),
+                : () {
+                    ref.invalidate(cosmeticDetailsProvider(cosmeticId));
+                    ref.invalidate(cosmeticImageProvider(cosmeticId));
+                    ref.invalidate(storageImagesProvider);
+                    ref.read(cosmeticImagesRevisionProvider.notifier).refresh();
+                  },
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -35,6 +41,8 @@ class CosmeticOptionDetailView extends ConsumerWidget {
     );
   }
 }
+
+// 변경 내용(2026-10-30): 고객과 같은 상품 이미지와 새로고침 경로를 사용한다.
 
 class _OptionForm extends ConsumerStatefulWidget {
   const _OptionForm({required this.cosmeticId, required this.data});
@@ -170,6 +178,7 @@ class _OptionFormState extends ConsumerState<_OptionForm> {
               if (isAdmin)
                 CosmeticImagePicker(
                   cosmeticId: widget.cosmeticId,
+                  cosmeticName: widget.data['cosmetic_name']?.toString() ?? '',
                   selected: _image,
                   enabled: !busy,
                   onChanged: (image) => setState(() => _image = image),
@@ -179,6 +188,8 @@ class _OptionFormState extends ConsumerState<_OptionForm> {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: CosmeticImage(
                     cosmeticIds: [widget.cosmeticId],
+                    cosmeticName:
+                        widget.data['cosmetic_name']?.toString() ?? '',
                     size: 180,
                   ),
                 ),

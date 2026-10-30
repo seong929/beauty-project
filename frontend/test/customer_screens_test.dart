@@ -67,7 +67,21 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final httpClient = client ?? MockClient((_) async => responseJson({}, 500));
+    final providedClient =
+        client ?? MockClient((_) async => responseJson({}, 500));
+    final httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/customer_login_id_available')) {
+        return responseJson({
+          'result': 'OK',
+          'login_id': request.url.queryParameters['login_id'],
+          'available': true,
+        });
+      }
+      final copy = http.Request(request.method, request.url)
+        ..headers.addAll(request.headers)
+        ..bodyBytes = request.bodyBytes;
+      return http.Response.fromStream(await providedClient.send(copy));
+    });
     addTearDown(httpClient.close);
     if (authService != null) addTearDown(authService.client.close);
     await tester.pumpWidget(
@@ -82,11 +96,9 @@ void main() {
         ],
         child: RepaintBoundary(
           key: captureKey,
-          child: const MaterialApp(
-            home: CustomerLoginScreen(),
-          ),
+          child: const MaterialApp(home: CustomerLoginScreen()),
         ),
-      )
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -100,6 +112,7 @@ void main() {
 
   Future<void> fillSignup(WidgetTester tester) async {
     await tester.enterText(find.byType(TextFormField).first, 'sodam');
+    await tapVisible(tester, find.byKey(const Key('check-login-id')));
     for (final entry in {
       'signup-name': '소담고객',
       'signup-password': 'secret123!',
@@ -133,7 +146,7 @@ void main() {
       );
       expect(find.text('다시 만나 반가워요'), findsOneWidget);
       expect(
-        find.text('나만의 뷰티 루틴을 소담과 함께 시작해 보세요.\n처음이신가요? 회원가입 후 로그인할 수 있습니다.'),
+        find.text('나만의 피부 루틴을 하나와 함께 시작해 보세요.\n처음이신가요? 회원가입 후 로그인할 수 있습니다.'),
         findsOneWidget,
       );
       final button = find.descendant(
@@ -237,73 +250,70 @@ void main() {
     },
   );
 
-  testWidgets('signup uses only the existing customer_upload API', (
-    tester,
-  ) async {
-    Map<String, String>? submitted;
-    await pumpApp(
-      tester,
-      client: MockClient((request) async {
-        expect(request.method, 'POST');
-        expect(request.url.path, '/customer_upload');
-        submitted = request.bodyFields;
-        return responseJson({
-          'result': 'OK',
-          'customer_id': submitted!['customer_id'],
-        });
-      }),
-    );
-    await tapVisible(tester, find.byKey(const Key('open-signup')));
-    expect(find.text('중복 확인 · 준비 중'), findsOneWidget);
-    expect(
-      tester
-          .widget<OutlinedButton>(find.byKey(const Key('check-login-id')))
-          .onPressed,
-      isNull,
-    );
-    expect(
-      tester
-          .widget<TextFormField>(find.byKey(const Key('signup-birth-year')))
-          .enabled,
-      isFalse,
-    );
-    expect(
-      tester
-          .widget<DropdownButtonFormField<String>>(
-            find.byKey(const Key('signup-gender')),
-          )
-          .onChanged,
-      isNull,
-    );
-    await fillSignup(tester);
-    await tapVisible(tester, find.byKey(const Key('signup-submit')));
-    expect(submitted!['customer_id'], matches(RegExp(r'^cus_[0-9a-f]{32}$')));
-    final fields = Map<String, String>.of(submitted!)..remove('customer_id');
-    expect(fields, {
-      'login_id': 'sodam',
-      'password': 'secret123!',
-      'customer_name': '소담고객',
-      'address': '서울시 강남구',
-      'email': 'sodam@example.com',
-      'phone': '010-1234-5678',
-    });
-    expect(find.text('다시 만나 반가워요'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextFormField>(find.byKey(const Key('login-id')))
-          .controller!
-          .text,
-      'sodam',
-    );
-    expect(
-      tester
-          .widget<TextFormField>(find.byKey(const Key('login-password')))
-          .controller!
-          .text,
-      isEmpty,
-    );
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'signup checks ID availability and submits supported customer fields',
+    (tester) async {
+      Map<String, String>? submitted;
+      await pumpApp(
+        tester,
+        client: MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/customer_upload');
+          submitted = request.bodyFields;
+          return responseJson({
+            'result': 'OK',
+            'customer_id': submitted!['customer_id'],
+          });
+        }),
+      );
+      await tapVisible(tester, find.byKey(const Key('open-signup')));
+      expect(find.text('중복 확인'), findsOneWidget);
+      expect(
+        tester
+            .widget<OutlinedButton>(find.byKey(const Key('check-login-id')))
+            .onPressed,
+        isNotNull,
+      );
+      expect(find.byKey(const Key('signup-birth-year')), findsNothing);
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+              find.byKey(const Key('signup-gender')),
+            )
+            .onChanged,
+        isNotNull,
+      );
+      await fillSignup(tester);
+      await tapVisible(tester, find.byKey(const Key('signup-submit')));
+      expect(submitted!['customer_id'], matches(RegExp(r'^cus_[0-9a-f]{32}$')));
+      final fields = Map<String, String>.of(submitted!)..remove('customer_id');
+      expect(fields, {
+        'login_id': 'sodam',
+        'password': 'secret123!',
+        'customer_name': '소담고객',
+        'address': '서울시 강남구',
+        'email': 'sodam@example.com',
+        'phone': '010-1234-5678',
+        'gender': 'UNDISCLOSED',
+      });
+      expect(find.text('다시 만나 반가워요'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('login-id')))
+            .controller!
+            .text,
+        'sodam',
+      );
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('login-password')))
+            .controller!
+            .text,
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('duplicate signup displays the existing API error', (
     tester,
@@ -318,7 +328,7 @@ void main() {
     await tapVisible(tester, find.byKey(const Key('open-signup')));
     await fillSignup(tester);
     await tapVisible(tester, find.byKey(const Key('signup-submit')));
-    expect(find.text('소담과 함께해요'), findsOneWidget);
+    expect(find.text('하나와 함께해요'), findsOneWidget);
     expect(
       tester.widget<Text>(find.byKey(const Key('auth-error'))).data,
       '중복된 고객 ID, 로그인 ID 또는 이메일입니다.',

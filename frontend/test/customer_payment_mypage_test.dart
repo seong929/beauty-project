@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'support/catalog_http.dart';
 import 'dart:ui' as ui;
 import 'package:beauty_project/model/customer/cosmetic.dart';
 import 'package:beauty_project/model/customer/customers.dart';
@@ -13,7 +14,8 @@ import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/customer_providers.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
-import 'package:beauty_project/vm/customer/product_search_handler.dart';
+import 'package:beauty_project/vm/customer/checkout_points_handler.dart';
+import 'package:beauty_project/vm/customer/point_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -122,7 +124,9 @@ void main() {
     final result = ProviderContainer(
       overrides: [
         customerHandlerProvider.overrideWith(_Customer.new),
-        customerHttpClientProvider.overrideWithValue(client),
+        customerHttpClientProvider.overrideWithValue(
+          withCatalogFixture(client, [_product, _other], pointsBalance: 1200),
+        ),
       ],
     );
     addTearDown(result.dispose);
@@ -140,6 +144,9 @@ void main() {
           expect(jsonDecode(request.body), {
             'customer_id': 'cus_1',
             'shipping_address': '서울시 마포구 월드컵북로 21 301호',
+            'shipping_recipient': '김소담',
+            'shipping_phone': '01012345678',
+            'delivery_request': '요청사항 없음',
             'items': [
               {'cosmetic_id': 'sku_1', 'quantity': 2, 'sale_option': 'NORMAL'},
             ],
@@ -151,6 +158,56 @@ void main() {
       expect(receipt!.total, 60000);
       expect(receipt.quantity, 2);
       expect(scope.read(cartHandlerProvider).single.product.id, 'sku_2');
+    },
+  );
+
+  test(
+    'payment submits used points and uses the confirmed net receipt and balance',
+    () async {
+      final scope = container(
+        MockClient((request) async {
+          expect(jsonDecode(request.body)['points_to_use'], 500);
+          return _json({
+            ..._paid(),
+            'used_points': 500,
+            'payment_amount': 59500,
+            'earned_points': 5950,
+            'points_balance': 6650,
+          });
+        }),
+      );
+      final subscription = scope.listen(
+        checkoutPointSummaryProvider,
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      await scope.read(customerPointsProvider.future);
+      scope.read(checkoutPointsProvider.notifier).edit(500);
+      final receipt = await scope.read(customerPaymentProvider.notifier).pay();
+      expect(receipt!.usedPoints, 500);
+      expect(receipt.paymentAmount, 59500);
+      expect(receipt.earnedPoints, 5950);
+      expect(scope.read(customerHandlerProvider).value!.pointsBalance, 6650);
+    },
+  );
+
+  test(
+    'a server receipt that omits a requested point discount is uncertain',
+    () async {
+      final scope = container(MockClient((_) async => _json(_paid())));
+      final subscription = scope.listen(
+        checkoutPointSummaryProvider,
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      await scope.read(customerPointsProvider.future);
+      scope.read(checkoutPointsProvider.notifier).edit(500);
+      expect(await scope.read(customerPaymentProvider.notifier).pay(), isNull);
+      expect(
+        scope.read(customerPaymentProvider).error,
+        isA<OrderResultUncertain>(),
+      );
+      expect(scope.read(cartHandlerProvider), hasLength(2));
     },
   );
 
@@ -271,7 +328,9 @@ void main() {
       ProviderScope(
         overrides: [
           customerHandlerProvider.overrideWith(_Customer.new),
-          customerHttpClientProvider.overrideWithValue(client),
+          customerHttpClientProvider.overrideWithValue(
+            withCatalogFixture(client, [_product, _other], pointsBalance: 1200),
+          ),
         ],
         child: RepaintBoundary(
           key: capture,
@@ -355,13 +414,14 @@ void main() {
             expect(request.url.path, '/customer_update');
             expect(request.url.queryParameters['customer_id'], 'cus_1');
             expect(request.bodyFields['customer_name'], '새소담');
+            expect(request.bodyFields.containsKey('birth_year'), isFalse);
+            expect(request.bodyFields.containsKey('clear_birth_year'), isFalse);
             return _json({'result': 'OK'});
           }
           return _json({'results': _history()});
         }),
         mypage: true,
       );
-      scope.read(favoriteProductsProvider.notifier).toggle('sku_1');
       await tester.pumpAndSettle();
       expect(find.text('1,200P'), findsOneWidget);
       expect(find.text('김소담님'), findsOneWidget);
@@ -369,6 +429,7 @@ void main() {
       await tester.tap(find.byKey(const Key('mypage-edit-profile')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('profile-name')), '새소담');
+      expect(find.byKey(const Key('profile-birth-year')), findsNothing);
       await tester.ensureVisible(find.byKey(const Key('profile-save')));
       await tester.tap(find.byKey(const Key('profile-save')));
       await tester.pumpAndSettle();

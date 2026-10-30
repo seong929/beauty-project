@@ -41,7 +41,7 @@ class Customers {
   // Customers 객체 → 고객 정보 JSON. 비밀번호와 서버 전용 해시는 제외한다.
   Map<String, dynamic> toJson() {
     return {
-    'customer_id': customerId,
+      'customer_id': customerId,
       'login_id': loginId,
       'customer_name': name,
       'email': email,
@@ -53,16 +53,19 @@ class Customers {
     };
   }
 
-  // 기존 회원가입 API에 맞는 일곱 개 폼 필드만 전송한다.
+  // 가입 API의 고객 정보와 선택 인구통계 항목을 전송한다.
   Map<String, String> toForm({String? customerId}) {
     return {
       'customer_id': customerId ?? this.customerId,
-    'login_id': loginId.trim(),
-    'password': password,
-    'customer_name': name.trim(),
-    'email': email.trim(),
-    'address': address.trim(),
-    'phone': phone.trim(),
-  };
+      'login_id': loginId.trim(),
+      'password': password,
+      'customer_name': name.trim(),
+      'email': email.trim(),
+      'address': address.trim(),
+      'phone': phone.trim(),
+      'gender': gender,
+    };
   }
 }
+
+// 변경 내용(2026-10-30): 성별을 가입 폼·조회 JSON에 연결하고 출생연도 항목은 제거한다.

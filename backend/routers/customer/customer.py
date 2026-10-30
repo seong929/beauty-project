@@ -3,6 +3,7 @@ import pymysql
 import secrets
 from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError
+from typing import Literal
 
 from database import get_connection
 router = APIRouter(tags=["고객"])
@@ -53,14 +54,18 @@ def delivery_test():
 @router.post("/customer_upload",summary="고객 등록")
 def customeres_upload(
     customer_id: str = Form(...,min_length=1, max_length=60),
-    login_id: str = Form(...,min_length=2,max_length=60 ),
+    login_id: str = Form(...,min_length=2,max_length=50 ),
     password: str = Form(...,min_length=8,max_length=20 ),
     customer_name: str = Form(...,min_length=2,max_length=30),
     email: str = Form(...,max_length=100),
-    address: str = Form(...,max_length=100),
-    phone: str = Form(...,min_length=1,max_length=30)
+    address: str = Form(...,max_length=500),
+    phone: str = Form(...,min_length=1,max_length=30),
+    gender: Literal['M', 'F', 'OTHER', 'UNDISCLOSED'] = Form('UNDISCLOSED'),
     ):
 
+    login_id = login_id.strip()
+    if len(login_id) < 2:
+        raise HTTPException(422, '아이디는 2~50자로 입력해 주세요.')
     hashed_password = password_hasher.hash(password)
     conn = get_connection()
     try:
@@ -69,10 +74,10 @@ def customeres_upload(
             curs.execute(
                 """INSERT INTO customers (
                     customer_id, login_id, password_hash,
-                    customer_name, email, address, phone
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (customer_id, login_id, hashed_password,
-                 customer_name, email, address, phone),
+                    customer_name, email, address, phone, gender
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (customer_id, login_id.strip(), hashed_password,
+                 customer_name, email, address, phone, gender),
             )
             append_account_status(curs, customer_id, "ACTIVE")
         conn.commit()
@@ -167,8 +172,9 @@ def customer_update(
     customer_id: str = Query(..., min_length=1, max_length=60),
     customer_name: str = Form(..., min_length=1, max_length=30),
     email: str = Form(..., min_length=1, max_length=200),
-    address: str = Form(..., min_length=1, max_length=200),
+    address: str = Form(..., min_length=1, max_length=500),
     phone: str = Form(..., min_length=1, max_length=30),
+    gender: Literal['M', 'F', 'OTHER', 'UNDISCLOSED'] | None = Form(None),
 ):
     conn = None
     try:
@@ -176,30 +182,36 @@ def customer_update(
         conn.begin()
         with conn.cursor() as curs:
             curs.execute(
-                "SELECT customer_id FROM customers WHERE customer_id = %s FOR UPDATE",
+                "SELECT customer_id, gender FROM customers WHERE customer_id = %s FOR UPDATE",
                 (customer_id,),
             )
-            if curs.fetchone() is None:
+            previous = curs.fetchone()
+            if previous is None:
                 raise HTTPException(404, "존재하지 않는 고객입니다.")
+            # 기존 클라이언트에서 새 필드를 생략해도 저장된 정보를 지우지 않는다.
+            saved_gender = gender if gender is not None else previous.get('gender')
             curs.execute(
                 """
                 UPDATE customers
                 SET customer_name = %s,
                 email = %s,
                 address = %s,
-                phone = %s
+                phone = %s,
+                gender = %s
                 WHERE customer_id = %s
                 """,
                 (customer_name,
                 email,
                 address,
                 phone,
+                saved_gender,
                 customer_id,))
             
         conn.commit()
         return {
             "result": "OK",
-            "message": "고객 정보가 수정되었습니다."
+            "message": "고객 정보가 수정되었습니다.",
+            "gender": saved_gender,
         }
 
     except pymysql.err.IntegrityError:
@@ -244,3 +256,27 @@ def customer_delect(customer_id: str = Form(..., min_length=1, max_length=64)):
         raise
     finally:
         conn.close()
+
+
+# 추가 기능(2026-10-30): 회원가입 전 아이디 중복 확인.
+# 다른 고객의 개인정보는 반환하지 않으며, 최종 가입의 DB 고유키 검사도 유지한다.
+@router.get('/customer_login_id_available', summary='고객 아이디 중복 확인')
+def customer_login_id_available(login_id: str = Query(..., min_length=2, max_length=50)):
+    value = login_id.strip()
+    if len(value) < 2:
+        raise HTTPException(422, '아이디는 2~50자로 입력해 주세요.')
+    conn = None
+    try:
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT 1 AS found FROM customers WHERE login_id = %s LIMIT 1', (value,))
+            available = cursor.fetchone() is None
+        return {'result': 'OK', 'login_id': value, 'available': available}
+    except pymysql.MySQLError:
+        raise HTTPException(503, '아이디를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.') from None
+    finally:
+        if conn is not None:
+            conn.close()
+
+# 변경 내용: 가입·로그인·정보 수정에서 선택 성별을 처리한다.
+# 고객 API의 출생연도 입력·저장·응답 처리는 제거했다.

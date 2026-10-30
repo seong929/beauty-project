@@ -87,23 +87,22 @@ void main() {
   }
 
   testWidgets(
-    'cart updates quantity, merges matching sizes, and handles selection and deletion',
+    'cart has no quantity controls, merges sizes, and handles selection and deletion',
     (tester) async {
       final container = await pumpCart(tester);
       final cart = container.read(cartHandlerProvider.notifier);
       final product = homePreviewProducts.first;
       cart.add(product, product.options[1], 1);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('increase-preview_1:30ml')));
-      await tester.pumpAndSettle();
-      expect(container.read(cartHandlerProvider).first.quantity, 3);
+      expect(find.byKey(const Key('increase-preview_1:30ml')), findsNothing);
+      expect(container.read(cartHandlerProvider).first.quantity, 2);
       await tester.tap(find.byKey(const Key('change-size-preview_1:30ml')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('cart-size-50ml')));
       await tester.pumpAndSettle();
       expect(container.read(cartHandlerProvider), hasLength(1));
-      expect(container.read(cartHandlerProvider).single.quantity, 4);
-      expect(container.read(selectedCartTotalProvider), 99600);
+      expect(container.read(cartHandlerProvider).single.quantity, 3);
+      expect(container.read(selectedCartTotalProvider), 74700);
       await tester.tap(find.byKey(const Key('select-all-cart')));
       await tester.pumpAndSettle();
       expect(container.read(selectedCartTotalProvider), 0);
@@ -119,62 +118,58 @@ void main() {
     },
   );
 
-  testWidgets(
-    'checkout shows cart edits and the existing address without a management button',
-    (tester) async {
-      final container = await pumpCart(tester);
-      await tester.ensureVisible(
-        find.byKey(const Key('change-size-preview_1:30ml')),
-      );
-      await tester.tap(find.byKey(const Key('change-size-preview_1:30ml')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('cart-size-50ml')));
-      await tester.pumpAndSettle();
-      expect(container.read(selectedCartTotalProvider), 49800);
-      await tester.tap(find.byKey(const Key('cart-go-checkout')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('customer-checkout-screen')), findsOneWidget);
-      expect(find.text('서울시 강남구 1'), findsOneWidget);
-      expect(find.byKey(const Key('checkout-change-address')), findsNothing);
-      expect(find.text('관리'), findsNothing);
-      expect(container.read(checkoutAddressProvider)!.address, '서울시 강남구 1');
-      expect(
-        container.read(customerHandlerProvider).value!.address,
-        '서울시 강남구 1',
-      );
-      await openCheckoutAgreement(tester);
-      expect(
-        tester
-            .widget<FilledButton>(find.byKey(const Key('checkout-payment')))
-            .onPressed,
-        isNull,
-      );
-      expect(find.text('49,800원 결제하기'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text(
-          '결제수단 선택은 화면에서만 적용됩니다. 현재는 카드·계좌에서 금액이 청구되지 않고 주문이 결제 완료 상태로 저장됩니다.',
-        ),
-        180,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.text(
-          '결제수단 선택은 화면에서만 적용됩니다. 현재는 카드·계좌에서 금액이 청구되지 않고 주문이 결제 완료 상태로 저장됩니다.',
-        ),
-        findsOneWidget,
-      );
-      await agreeToCheckout(tester);
-      expect(
-        tester
-            .widget<FilledButton>(find.byKey(const Key('checkout-payment')))
-            .onPressed,
-        isNotNull,
-      );
-      expect(container.read(cartHandlerProvider), hasLength(1));
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('checkout shows cart edits and an editable shipping address', (
+    tester,
+  ) async {
+    final container = await pumpCart(tester);
+    await tester.ensureVisible(
+      find.byKey(const Key('change-size-preview_1:30ml')),
+    );
+    await tester.tap(find.byKey(const Key('change-size-preview_1:30ml')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cart-size-50ml')));
+    await tester.pumpAndSettle();
+    expect(container.read(selectedCartTotalProvider), 49800);
+    await tester.tap(find.byKey(const Key('cart-go-checkout')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('customer-checkout-screen')), findsOneWidget);
+    expect(find.text('서울시 강남구 1'), findsOneWidget);
+    expect(find.byKey(const Key('checkout-change-address')), findsOneWidget);
+    expect(find.text('관리'), findsNothing);
+    expect(container.read(checkoutAddressProvider)!.address, '서울시 강남구 1');
+    expect(container.read(customerHandlerProvider).value!.address, '서울시 강남구 1');
+    await openCheckoutAgreement(tester);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('checkout-payment')))
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('49,800원 결제하기'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text(
+        '결제수단 선택은 화면에서만 적용됩니다. 현재는 카드·계좌에서 금액이 청구되지 않고 주문이 결제 완료 상태로 저장됩니다.',
+      ),
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        '결제수단 선택은 화면에서만 적용됩니다. 현재는 카드·계좌에서 금액이 청구되지 않고 주문이 결제 완료 상태로 저장됩니다.',
+      ),
+      findsOneWidget,
+    );
+    await agreeToCheckout(tester);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('checkout-payment')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(container.read(cartHandlerProvider), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('checkout requires a valid address before payment', (
     tester,
@@ -188,7 +183,12 @@ void main() {
           .onPressed,
       isNull,
     );
-    expect(find.byKey(const Key('checkout-change-address')), findsNothing);
+    expect(
+      tester
+          .widget<TextButton>(find.byKey(const Key('checkout-change-address')))
+          .onPressed,
+      isNull,
+    );
     expect(find.text('배송지를 입력해 주세요.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

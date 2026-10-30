@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'support/catalog_http.dart';
 import 'dart:ui' as ui;
 import 'package:beauty_project/model/customer/cosmetic.dart';
 import 'package:beauty_project/model/customer/customers.dart';
@@ -8,6 +9,7 @@ import 'package:beauty_project/view/customer/login/customer_auth_widgets.dart';
 import 'package:beauty_project/view/customer/order/check_screen.dart';
 import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/checkout_flow_handler.dart';
+import 'package:beauty_project/vm/customer/checkout_points_handler.dart';
 import 'package:beauty_project/vm/customer/checkout_handler.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/customer_providers.dart';
@@ -60,6 +62,7 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(390, 844),
     GlobalKey? capture,
+    int pointsBalance = 1200,
   }) async {
     requests = 0;
     tester.view.physicalSize = size;
@@ -71,10 +74,14 @@ void main() {
         overrides: [
           customerHandlerProvider.overrideWith(_CheckoutCustomer.new),
           customerHttpClientProvider.overrideWithValue(
-            MockClient((_) async {
-              requests++;
-              return http.Response('{}', 500);
-            }),
+            withCatalogFixture(
+              MockClient((_) async {
+                requests++;
+                return http.Response('{}', 500);
+              }),
+              [_product],
+              pointsBalance: pointsBalance,
+            ),
           ),
         ],
         child: RepaintBoundary(
@@ -109,7 +116,7 @@ void main() {
         tester
             .widget<TextFormField>(find.byKey(const Key('checkout-points')))
             .enabled,
-        isFalse,
+        isTrue,
       );
       expect(scope.read(selectedCartTotalProvider), 15900);
       await tapCheckoutControl(tester, 'checkout-next');
@@ -203,6 +210,74 @@ void main() {
     },
   );
 
+  testWidgets(
+    'points reduce payment, persist across steps and require renewed consent after editing',
+    (tester) async {
+      final scope = await pump(tester);
+      await tapCheckoutControl(tester, 'checkout-next');
+      await tester.enterText(find.byKey(const Key('checkout-points')), '500');
+      await tester.pumpAndSettle();
+      expect(scope.read(checkoutPointSummaryProvider).used, 500);
+      expect(find.text('15,400원 · 다음'), findsOneWidget);
+      await tapCheckoutControl(tester, 'checkout-next');
+      expect(find.text('1540P'), findsWidgets);
+      await tapCheckoutControl(tester, 'checkout-method-card');
+      await tapCheckoutControl(tester, 'checkout-next');
+      await agreeToCheckout(tester);
+      expect(find.text('15,400원 결제하기'), findsOneWidget);
+      scope.read(checkoutPointsProvider.notifier).edit(600);
+      await tester.pumpAndSettle();
+      expect(scope.read(checkoutFlowProvider).allAgreed, isFalse);
+      expect(find.text('15,300원 결제하기'), findsOneWidget);
+      await tapCheckoutControl(tester, 'checkout-back');
+      await tapCheckoutControl(tester, 'checkout-back');
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('checkout-points')))
+            .controller!
+            .text,
+        '600',
+      );
+      await tapCheckoutControl(tester, 'checkout-use-all-points');
+      expect(scope.read(checkoutPointSummaryProvider).used, 1200);
+      expect(find.text('14,700원 · 다음'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('checkout-points')),
+        '999999',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('checkout-points')))
+            .controller!
+            .text,
+        '1200',
+      );
+      await tapCheckoutControl(tester, 'checkout-clear-points');
+      expect(scope.read(checkoutPointSummaryProvider).used, 0);
+      expect(find.text('15,900원 · 다음'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'all points are capped by the order total and a zero payment earns zero',
+    (tester) async {
+      final scope = await pump(tester, pointsBalance: 20000);
+      await tapCheckoutControl(tester, 'checkout-next');
+      await tapCheckoutControl(tester, 'checkout-use-all-points');
+      expect(scope.read(checkoutPointSummaryProvider).used, 15900);
+      expect(find.text('0원 · 다음'), findsOneWidget);
+      await tapCheckoutControl(tester, 'checkout-next');
+      expect(find.text('0P'), findsWidgets);
+      scope.read(customerHandlerProvider.notifier).logout();
+      await tester.pumpAndSettle();
+      expect(scope.read(checkoutPointsProvider).amount, 0);
+      expect(scope.read(checkoutPointsProvider).useAll, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('back traverses steps and logout clears the checkout draft', (
     tester,
   ) async {
@@ -258,7 +333,7 @@ void main() {
     (tester) async {
       final scope = await pump(tester);
       expect(find.text('관리'), findsNothing);
-      expect(find.byKey(const Key('checkout-change-address')), findsNothing);
+      expect(find.byKey(const Key('checkout-change-address')), findsOneWidget);
       await chooseRequest(tester, CheckoutDeliveryRequest.door);
       expect(
         scope.read(checkoutFlowProvider).deliveryRequestText,

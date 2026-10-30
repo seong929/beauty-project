@@ -43,13 +43,27 @@ class DeliveryAddressHandler {
   const DeliveryAddressHandler(this.ref);
   final Ref ref;
 
-  Future<void> save(String customerId, String orderId, String address) async {
+  Future<void> save(
+    String customerId,
+    String orderId,
+    String address, {
+    String? recipient,
+    String? phone,
+    String? deliveryRequest,
+  }) async {
     if (ref.read(customerHandlerProvider).value?.customerId != customerId) {
       throw const CustomerAuthException('다시 로그인한 뒤 배송지를 변경해 주세요.');
     }
     await ref
         .read(customerDeliveryServiceProvider)
-        .updateAddress(customerId, orderId, address);
+        .updateAddress(
+          customerId,
+          orderId,
+          address,
+          recipient: recipient,
+          phone: phone,
+          deliveryRequest: deliveryRequest,
+        );
     if (!ref.mounted ||
         ref.read(customerHandlerProvider).value?.customerId != customerId) {
       return;

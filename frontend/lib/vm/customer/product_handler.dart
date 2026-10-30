@@ -20,7 +20,14 @@ class ProductHandler extends AsyncNotifier<List<Cosmetic>> {
       ref.watch(customerCatalogServiceProvider).fetchProducts();
 
   Future<void> refreshProducts() async {
-    if (state.isLoading) return;
+    if (state.isLoading) {
+      try {
+        await future;
+      } catch (_) {
+        // 조회 실패는 AsyncValue에 남겨 화면의 재시도 안내로 전달한다.
+      }
+      return;
+    }
     final service = ref.read(customerCatalogServiceProvider);
     state = const AsyncLoading();
     final result = await AsyncValue.guard(service.fetchProducts);
@@ -227,3 +234,5 @@ List<T> filterProducts<T extends Cosmetic>(
   }
   return filtered;
 }
+
+// 변경 내용(2026-10-30): 이미 진행 중인 재고 조회가 있으면 완료까지 기다려 결제의 빈 재고 판정을 막는다.

@@ -48,6 +48,8 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
     required String email,
     required String phone,
     required String address,
+    String? gender,
+    bool updateDemographics = false,
   }) async {
     final customer = state.value;
     if (customer == null) throw const CustomerAuthException('다시 로그인해 주세요.');
@@ -57,6 +59,7 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
       'email': email.trim(),
       'phone': phone.trim(),
       'address': address.trim(),
+      if (updateDemographics) 'gender': gender ?? 'UNDISCLOSED',
     });
     await ref.read(customerServiceProvider).updateCustomer(updated);
     if (!ref.mounted || state.value?.customerId != customer.customerId) return;
@@ -67,8 +70,18 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
         'email': updated.email,
         'phone': updated.phone,
         'address': updated.address,
+        'gender': updated.gender,
       }),
     );
+  }
+
+  void updatePointsBalance(int balance) {
+    final customer = state.value;
+    if (customer != null && balance >= 0) {
+      state = AsyncData(
+        Customers.fromJson({...customer.toJson(), 'points_balance': balance}),
+      );
+    }
   }
 
   Future<void> withdraw() async {
@@ -83,7 +96,6 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
       state = const AsyncData(null);
       ref.invalidate(cartHandlerProvider);
       ref.invalidate(cartPersistenceProvider);
-      ref.invalidate(favoriteProductsProvider);
       ref.invalidate(recentProductSearchesProvider);
     }
   }
@@ -91,3 +103,5 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
 
 final customerHandlerProvider =
     AsyncNotifierProvider<CustomerHandler, Customers?>(CustomerHandler.new);
+
+// 변경 내용(2026-10-30): 인구통계 수정 값을 저장하고 삭제된 찜 상태 초기화는 제거한다.

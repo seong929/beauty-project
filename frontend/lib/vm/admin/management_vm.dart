@@ -6,6 +6,7 @@ import '../auth/api_client_provider.dart';
 import '../auth/auth_notifier.dart';
 import '../staff/staff_inventory_vm.dart';
 import 'return_management_state.dart';
+import '../common/storage_image_handler.dart';
 
 final managementServiceProvider = Provider<ManagementService>(
   (ref) => ManagementService(ref.watch(apiClientProvider)),
@@ -209,6 +210,7 @@ class ManagementActions extends Notifier<bool> {
           .read(managementServiceProvider)
           .uploadCosmeticImage(cosmeticId, bytes, filename);
       ref.invalidate(cosmeticImageProvider(cosmeticId));
+      ref.invalidate(storageImagesProvider);
       ref.read(cosmeticImagesRevisionProvider.notifier).refresh();
       ref.invalidate(distinctCosmeticsPageProvider);
     } finally {
@@ -220,3 +222,5 @@ class ManagementActions extends Notifier<bool> {
 final managementActionsProvider = NotifierProvider<ManagementActions, bool>(
   ManagementActions.new,
 );
+
+// 변경 내용(2026-10-30): 관리자 이미지 업로드 성공 후 공용 Firebase 목록과 이미지 표시를 갱신한다.
