@@ -1,3 +1,6 @@
+// 기능: 고객 API 주소·HTTP 클라이언트·서비스 의존성 주입.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 

@@ -1,5 +1,9 @@
+// 기능: 배송지·수량·포인트·결제 수단·동의 단계 연결.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/cart_persistence_handler.dart';
 import 'package:beauty_project/vm/customer/checkout_flow_handler.dart';
@@ -29,8 +33,16 @@ class CustomerCheckoutScreen extends ConsumerStatefulWidget {
 class _CustomerCheckoutScreenState
     extends ConsumerState<CustomerCheckoutScreen> {
   final _scroll = ScrollController();
-  bool _submitting = false;
-  bool _editingAddress = false;
+  late final _paymentUi = customerOperationProvider((
+    screen: this,
+    action: 'checkout-payment',
+  ));
+  late final _addressUi = customerOperationProvider((
+    screen: this,
+    action: 'checkout-address',
+  ));
+  bool get _submitting => ref.read(_paymentUi).isLoading;
+  bool get _editingAddress => ref.read(_addressUi).isLoading;
 
   @override
   void initState() {
@@ -42,6 +54,7 @@ class _CustomerCheckoutScreenState
     });
   }
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _scroll.dispose();
@@ -76,13 +89,14 @@ class _CustomerCheckoutScreenState
     ),
   );
 
+  /// Function: 중복 결제를 막고 결제 VM의 확정 결과를 주문 완료 화면에 전달한다.
   Future<void> _pay() async {
     if (_submitting ||
         !ref.read(checkoutFlowProvider).canSubmit ||
         ref.read(customerPaymentProvider).isLoading) {
       return;
     }
-    setState(() => _submitting = true);
+    ref.read(_paymentUi.notifier).begin();
     try {
       final order = await ref.read(customerPaymentProvider.notifier).pay();
       if (!mounted || order == null) return;
@@ -92,7 +106,7 @@ class _CustomerCheckoutScreenState
         ),
       );
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) ref.read(_paymentUi.notifier).finish();
     }
   }
 
@@ -105,7 +119,7 @@ class _CustomerCheckoutScreenState
     }
     final customerId = ref.read(customerHandlerProvider).value?.customerId;
     if (customerId == null) return;
-    setState(() => _editingAddress = true);
+    ref.read(_addressUi.notifier).begin();
     try {
       final address = await showShippingAddressSheet(
         context,
@@ -118,7 +132,7 @@ class _CustomerCheckoutScreenState
       }
       ref.read(checkoutAddressProvider.notifier).update(address);
     } finally {
-      if (mounted) setState(() => _editingAddress = false);
+      if (mounted) ref.read(_addressUi.notifier).finish();
     }
   }
 
@@ -460,6 +474,8 @@ class _CustomerCheckoutScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_paymentUi);
+    ref.watch(_addressUi);
     final flow = ref.watch(checkoutFlowProvider);
     final payment = ref.watch(customerPaymentProvider);
     final reviewRequired = ref

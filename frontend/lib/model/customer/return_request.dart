@@ -1,3 +1,6 @@
+// 기능: 반품 신청·수거·환불 진행 데이터.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 class CustomerReturnRequest {
   const CustomerReturnRequest({
     required this.id,

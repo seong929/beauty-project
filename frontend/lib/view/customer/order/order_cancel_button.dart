@@ -1,5 +1,9 @@
+// 기능: 주문 전체 취소 확인창·중복 요청 잠금·결과 안내.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/order.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/order_cancellation_handler.dart';
@@ -18,13 +22,19 @@ class OrderCancelButton extends ConsumerStatefulWidget {
 }
 
 class _OrderCancelButtonState extends ConsumerState<OrderCancelButton> {
-  bool _confirming = false;
+  late final _operationProvider = customerOperationProvider((
+    screen: this,
+    action: 'confirm-cancel',
+  ));
+  CustomerOperationHandler get _operation =>
+      ref.read(_operationProvider.notifier);
+  bool get _confirming => ref.read(_operationProvider).isLoading;
 
   // Function: 주문 전체 취소 여부를 확인한 뒤 실제 취소 요청을 한 번 전송한다.
   Future<void> _cancel() async {
     if (_confirming || !widget.canCancel) return;
     final id = widget.order.customerId;
-    setState(() => _confirming = true);
+    _operation.begin();
     try {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -72,12 +82,13 @@ class _OrderCancelButtonState extends ConsumerState<OrderCancelButton> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
     } finally {
-      if (mounted) setState(() => _confirming = false);
+      if (mounted) _operation.finish();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_operationProvider);
     final cancellation = ref.watch(customerCancellationProvider);
     final cancelled =
         widget.order.status == 'CANCELLED' ||

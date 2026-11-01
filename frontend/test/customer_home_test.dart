@@ -225,6 +225,17 @@ void main() {
       final key = GlobalKey();
       await pumpHome(tester, captureKey: key);
       Future<void> capture(String filename) async {
+        // 테스트에서는 이미지 디코딩 완료 후 캡처해 실제 배너·추천 사진을 확인한다.
+        final providers = tester
+            .widgetList<Image>(find.byType(Image))
+            .map((image) => image.image)
+            .toList();
+        await tester.runAsync(() async {
+          for (final provider in providers) {
+            await precacheImage(provider, key.currentContext!);
+          }
+        });
+        await tester.pumpAndSettle();
         final boundary =
             key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         await tester.runAsync(() async {
@@ -250,7 +261,7 @@ void main() {
   );
 
   testWidgets(
-    'the featured image gallery shows 10 images and supports full size viewing',
+    'the featured image gallery shows 20 images and supports full size viewing',
     (tester) async {
       await pumpHome(tester);
       final firstImage = find.byKey(const Key('uploaded-product-1'));
@@ -260,7 +271,7 @@ void main() {
       await tester.tap(firstImage);
       await tester.pumpAndSettle();
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      expect(find.text('상품 이미지 1 / 30'), findsOneWidget);
+      expect(find.text('상품 이미지 1 / 20'), findsOneWidget);
       expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
       await tester.tap(find.byTooltip('이미지 닫기'));
       await tester.pumpAndSettle();

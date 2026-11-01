@@ -1,5 +1,9 @@
+// 기능: 고객 배송 현황 목록과 상태별 필터.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/order.dart';
 import 'package:beauty_project/vm/customer/delivery_handler.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
@@ -19,7 +23,10 @@ class CustomerDeliveryListScreen extends ConsumerStatefulWidget {
 
 class _CustomerDeliveryListScreenState
     extends ConsumerState<CustomerDeliveryListScreen> {
-  String _filter = '전체';
+  late final _filterProvider = deliveryListFilterProvider(this);
+  String get _filter => ref.read(_filterProvider).value;
+
+  /// Function: 관련 Provider를 무효화해 최신 서버 상태를 다시 조회한다.
   void _refresh() {
     ref.invalidate(deliveryRecordsProvider(null));
     ref.invalidate(customerOrdersProvider);
@@ -27,6 +34,7 @@ class _CustomerDeliveryListScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_filterProvider);
     final records = ref.watch(deliveryRecordsProvider(null));
     final orders = ref.watch(customerOrdersProvider);
     return Scaffold(
@@ -64,7 +72,8 @@ class _CustomerDeliveryListScreenState
                           key: Key('delivery-filter-$label'),
                           label: Text(label),
                           selected: _filter == label,
-                          onSelected: (_) => setState(() => _filter = label),
+                          onSelected: (_) =>
+                              ref.read(_filterProvider.notifier).select(label),
                         ),
                       ),
                   ],

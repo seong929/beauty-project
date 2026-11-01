@@ -1,5 +1,9 @@
+// 기능: 고객 로그인 입력·비밀번호 표시·가입 화면 이동.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 
 import 'package:beauty_project/vm/customer/customer_auth_validation.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
@@ -22,9 +26,12 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
   final _password = TextEditingController();
   final _loginIdFocus = FocusNode();
   final _passwordFocus = FocusNode();
-  bool _showPassword = false;
-  bool _openingSignup = false;
+  late final _formProvider = customerAuthFormProvider(this);
+  CustomerAuthFormHandler get _formActions => ref.read(_formProvider.notifier);
+  bool get _showPassword => ref.read(_formProvider).showPassword;
+  bool get _openingSignup => ref.read(_formProvider).openingSignup;
 
+  /// Function: 폼을 검증하고 로그인 VM을 호출한 뒤 성공하면 홈 화면으로 이동한다.
   Future<void> _login() async {
     if (_openingSignup || ref.read(customerHandlerProvider).isLoading) return;
     if (!_formKey.currentState!.validate()) return;
@@ -39,6 +46,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
     );
   }
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _loginId.dispose();
@@ -48,10 +56,11 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
     super.dispose();
   }
 
+  /// Function: 중복 화면 열기를 막고 가입 결과의 아이디를 로그인 입력에 반영한다.
   Future<void> _openSignup() async {
     if (_openingSignup || ref.read(customerHandlerProvider).isLoading) return;
     FocusScope.of(context).unfocus();
-    setState(() => _openingSignup = true);
+    _formActions.openingSignup(true);
     ref.read(customerHandlerProvider.notifier).clearError();
     ref.read(customerRegistrationProvider.notifier).reset();
     try {
@@ -67,7 +76,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('회원가입이 완료되었습니다.')));
     } finally {
-      if (mounted) setState(() => _openingSignup = false);
+      if (mounted) _formActions.openingSignup(false);
     }
   }
 
@@ -89,6 +98,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_formProvider);
     final auth = ref.watch(customerHandlerProvider);
     final isBusy = auth.isLoading;
     final error = auth.hasError ? auth.error.toString() : '';
@@ -178,7 +188,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
                             ? null
                             : () {
                                 final selection = _password.selection;
-                                setState(() => _showPassword = !_showPassword);
+                                _formActions.togglePassword();
                                 _passwordFocus.requestFocus();
                                 if (selection.isValid) {
                                   _password.selection = selection;

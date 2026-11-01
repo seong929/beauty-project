@@ -1,5 +1,9 @@
+// 기능: 선택 상품·수량·리뷰 표시와 장바구니·바로 구매.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/vm/customer/cart_handler.dart';
 import 'package:beauty_project/vm/customer/cart_persistence_handler.dart';
@@ -25,7 +29,13 @@ class CustomerProductDetailScreen extends ConsumerStatefulWidget {
 
 class _CustomerProductDetailScreenState
     extends ConsumerState<CustomerProductDetailScreen> {
-  bool _saving = false;
+  late final _operationProvider = customerOperationProvider((
+    screen: this,
+    action: 'add-to-cart',
+  ));
+  CustomerOperationHandler get _operation =>
+      ref.read(_operationProvider.notifier);
+  bool get _saving => ref.read(_operationProvider).isLoading;
   final _reviewsKey = GlobalKey();
 
   void _search() {
@@ -43,7 +53,7 @@ class _CustomerProductDetailScreenState
     // 상세 화면이 닫힌 후에도 알림의 '보기'가 동작하도록 Navigator를 보관한다.
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _saving = true);
+    _operation.begin();
     try {
       final saved = await ref
           .read(cartPersistenceProvider.notifier)
@@ -85,12 +95,13 @@ class _CustomerProductDetailScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) _operation.finish();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_operationProvider);
     final product = widget.product;
     final option = widget.option ?? product.options.first;
     final saving = _saving || ref.watch(cartPersistenceProvider).isLoading;

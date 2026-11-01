@@ -1,3 +1,6 @@
+// 기능: 로그인·가입·회원 정보의 입력값 검증.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 // 기존 고객 API의 필수 항목과 길이 제한에 맞춘 입력 검증.
 class CustomerAuthValidation {
   static String? loginId(String? value) {

@@ -1,3 +1,6 @@
+// 기능: 고객 로그인·회원가입·아이디 중복 확인 통신.
+// 통신 계층: 요청·응답 검증을 담당하고 로딩·성공·실패 표시는 VM의 AsyncValue에 맡긴다.
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -44,6 +47,7 @@ class CustomerAuthService {
     return url.path.endsWith('/') ? url : url.replace(path: '${url.path}/');
   }
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   void dispose() {
     if (_ownsClient) client.close();
   }
@@ -70,6 +74,7 @@ class CustomerAuthService {
     return customer;
   }
 
+  /// Function: 회원가입 HTTP 요청을 보내고 서버의 등록 결과를 검증한다.
   Future<String> register(Customers registration) async {
     // 기존 API는 고객번호를 필수로 받으므로 앱에서 충돌 가능성이 낮은 번호를 만든다.
     final random = Random.secure();

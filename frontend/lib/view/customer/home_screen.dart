@@ -1,5 +1,9 @@
+// 기능: 홈 검색·필터·추천 이미지·판매 상품과 탭 이동.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/product_filter_draft_handler.dart';
 
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
@@ -28,6 +32,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
   final _searchFocus = FocusNode();
   final _scroll = ScrollController();
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _search.dispose();
@@ -51,73 +56,81 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
     showCustomerProductProfile(context, ref);
   }
 
+  /// Function: 홈 필터의 임시 선택을 열고 적용한 정렬·재고 조건을 반영한다.
   Future<void> _showFilters() async {
     final current = ref.read(productFilterProvider);
-    var stockOnly = current.inStockOnly;
-    var sort = current.sort;
-    final apply = await showModalBottomSheet<bool>(
+    final draftProvider = productFilterDraftProvider((
+      screen: Object(),
+      initial: current,
+    ));
+    final apply = await showModalBottomSheet<ProductFilter>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  '상품 필터',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('구매 가능한 상품만'),
-                  value: stockOnly,
-                  onChanged: (value) => update(() => stockOnly = value),
-                ),
-                DropdownButtonFormField<ProductSort>(
-                  initialValue: sort,
-                  decoration: const InputDecoration(labelText: '정렬'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: ProductSort.recommended,
-                      child: Text('기본순'),
-                    ),
-                    DropdownMenuItem(
-                      value: ProductSort.priceLow,
-                      child: Text('낮은 가격순'),
-                    ),
-                    DropdownMenuItem(
-                      value: ProductSort.priceHigh,
-                      child: Text('높은 가격순'),
-                    ),
-                    DropdownMenuItem(
-                      value: ProductSort.ratingHigh,
-                      child: Text('별점 높은 순'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) update(() => sort = value);
-                  },
-                ),
-                const SizedBox(height: 20),
-                FilledButton(
-                  key: const Key('apply-product-filters'),
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('적용하기'),
-                ),
-              ],
+      builder: (context) => Consumer(
+        builder: (context, sheetRef, _) {
+          final draft = sheetRef.watch(draftProvider);
+          final actions = sheetRef.read(draftProvider.notifier);
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '상품 필터',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('구매 가능한 상품만'),
+                    value: draft.inStockOnly,
+                    onChanged: actions.stockOnly,
+                  ),
+                  DropdownButtonFormField<ProductSort>(
+                    initialValue: draft.sort,
+                    decoration: const InputDecoration(labelText: '정렬'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: ProductSort.recommended,
+                        child: Text('기본순'),
+                      ),
+                      DropdownMenuItem(
+                        value: ProductSort.priceLow,
+                        child: Text('낮은 가격순'),
+                      ),
+                      DropdownMenuItem(
+                        value: ProductSort.priceHigh,
+                        child: Text('높은 가격순'),
+                      ),
+                      DropdownMenuItem(
+                        value: ProductSort.ratingHigh,
+                        child: Text('별점 높은 순'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) actions.sort(value);
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    key: const Key('apply-product-filters'),
+                    onPressed: () =>
+                        Navigator.pop(context, sheetRef.read(draftProvider)),
+                    child: const Text('적용하기'),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
-    if (apply == true && mounted) {
+    if (apply != null && mounted) {
       ref
           .read(productFilterProvider.notifier)
-          .apply(inStockOnly: stockOnly, sort: sort);
+          .apply(inStockOnly: apply.inStockOnly, sort: apply.sort);
     }
   }
 

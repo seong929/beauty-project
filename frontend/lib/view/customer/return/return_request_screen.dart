@@ -1,6 +1,10 @@
+// 기능: 반품 상품·사유·수량·확인 입력과 신청.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/order.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
@@ -30,10 +34,13 @@ class _CustomerReturnRequestScreenState
   final _form = GlobalKey<FormState>();
   final _details = TextEditingController();
   final _quantity = TextEditingController(text: '1');
-  String? _reason;
-  String? _itemId;
-  bool _confirmed = false;
+  late final _draftProvider = customerReturnDraftProvider(this);
+  CustomerReturnDraftHandler get _draft => ref.read(_draftProvider.notifier);
+  String? get _reason => ref.read(_draftProvider).reason;
+  String? get _itemId => ref.read(_draftProvider).itemId;
+  bool get _confirmed => ref.read(_draftProvider).confirmed;
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _details.dispose();
@@ -65,6 +72,7 @@ class _CustomerReturnRequestScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_draftProvider);
     final customerId = ref.watch(customerHandlerProvider).value?.customerId;
     final order =
         ref
@@ -178,11 +186,10 @@ class _CustomerReturnRequestScreenState
                                         ),
                                       ),
                                   ],
-                                  onChanged: (value) => setState(() {
-                                    _itemId = value;
+                                  onChanged: (value) {
+                                    _draft.selectItem(value);
                                     _quantity.text = '1';
-                                    _confirmed = false;
-                                  }),
+                                  },
                                 ),
                                 const SizedBox(height: 18),
                               ],
@@ -210,10 +217,8 @@ class _CustomerReturnRequestScreenState
                                       child: Text(reason),
                                     ),
                                 ],
-                                onChanged: (value) => setState(() {
-                                  _reason = value;
-                                  _confirmed = false;
-                                }),
+                                onChanged: (value) =>
+                                    _draft.selectReason(value),
                                 validator: (value) =>
                                     value == null ? '반품 사유를 선택해 주세요.' : null,
                               ),
@@ -235,7 +240,7 @@ class _CustomerReturnRequestScreenState
                                 ),
                                 onChanged: (_) {
                                   if (_confirmed) {
-                                    setState(() => _confirmed = false);
+                                    _draft.confirm(false);
                                   }
                                 },
                                 validator: (value) =>
@@ -287,8 +292,7 @@ class _CustomerReturnRequestScreenState
                           contentPadding: EdgeInsets.zero,
                           controlAffinity: ListTileControlAffinity.leading,
                           value: _confirmed,
-                          onChanged: (value) =>
-                              setState(() => _confirmed = value ?? false),
+                          onChanged: (value) => _draft.confirm(value ?? false),
                           title: const Text(
                             '상품 상태와 반품 신청 내용을 확인했습니다.',
                             style: TextStyle(fontSize: 12),

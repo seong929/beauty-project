@@ -1,9 +1,13 @@
+// 기능: 우편번호 WebView 연결·주소 결과·오류·재시도.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class PostalAddress {
@@ -41,38 +45,43 @@ final addressSearchLauncherProvider =
           ),
     );
 
-class CustomerAddressSearchScreen extends StatefulWidget {
+class CustomerAddressSearchScreen extends ConsumerStatefulWidget {
   const CustomerAddressSearchScreen({super.key});
 
   @override
-  State<CustomerAddressSearchScreen> createState() =>
+  ConsumerState<CustomerAddressSearchScreen> createState() =>
       _CustomerAddressSearchScreenState();
 }
 
 class _CustomerAddressSearchScreenState
-    extends State<CustomerAddressSearchScreen> {
+    extends ConsumerState<CustomerAddressSearchScreen> {
   WebViewController? _controller;
   Timer? _timeout;
-  bool _loading = true;
-  bool _returned = false;
-  String? _error;
+  late final _supported =
+      !kIsWeb &&
+      const {
+        TargetPlatform.android,
+        TargetPlatform.iOS,
+        TargetPlatform.macOS,
+      }.contains(defaultTargetPlatform);
+  late final _postalProvider = customerPostalSearchProvider((
+    screen: this,
+    supported: _supported,
+  ));
+  CustomerPostalSearchHandler get _postal => ref.read(_postalProvider.notifier);
+  bool get _loading => ref.read(_postalProvider).loading;
+  bool get _returned => ref.read(_postalProvider).returned;
+  String? get _error => ref.read(_postalProvider).error;
 
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb &&
-        const {
-          TargetPlatform.android,
-          TargetPlatform.iOS,
-          TargetPlatform.macOS,
-        }.contains(defaultTargetPlatform)) {
+    if (_supported) {
       _initialize();
-    } else {
-      _loading = false;
-      _error = '이 기기에서는 주소 검색을 지원하지 않습니다. 이전 화면에서 주소를 직접 입력해 주세요.';
     }
   }
 
+  /// Function: 주소 검색 WebView를 준비하고 주소 결과·오류 이벤트를 연결한다.
   Future<void> _initialize() async {
     try {
       final controller = WebViewController();
@@ -84,12 +93,12 @@ class _CustomerAddressSearchScreenState
           if (!mounted || _returned) return;
           if (message.message == 'ready') {
             _timeout?.cancel();
-            setState(() => _loading = false);
+            _postal.ready();
             return;
           }
           try {
             final result = PostalAddress.fromMessage(message.message);
-            _returned = true;
+            _postal.returned();
             Navigator.of(context).pop(result);
           } on FormatException {
             _fail('주소를 불러오지 못했습니다. 다시 검색해 주세요.');
@@ -120,10 +129,7 @@ class _CustomerAddressSearchScreenState
 
   Future<void> _load() async {
     _timeout?.cancel();
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    _postal.start();
     _timeout = Timer(
       const Duration(seconds: 20),
       () => _fail('주소 검색 연결이 지연되고 있습니다. 다시 시도해 주세요.'),
@@ -135,15 +141,14 @@ class _CustomerAddressSearchScreenState
     }
   }
 
+  /// Function: 현재 화면이 유효한 경우 주소 검색 오류를 상태에 표시한다.
   void _fail(String message) {
     if (!mounted || _returned) return;
     _timeout?.cancel();
-    setState(() {
-      _loading = false;
-      _error = message;
-    });
+    _postal.fail(message);
   }
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _timeout?.cancel();
@@ -151,29 +156,32 @@ class _CustomerAddressSearchScreenState
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('배송지 주소 검색')),
-    body: Stack(
-      children: [
-        if (_controller != null) WebViewWidget(controller: _controller!),
-        if (_loading) const Center(child: CircularProgressIndicator()),
-        if (_error != null)
-          Container(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_error!),
-                if (_controller != null)
-                  TextButton(onPressed: _load, child: const Text('다시 시도')),
-              ],
+  Widget build(BuildContext context) {
+    ref.watch(_postalProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('배송지 주소 검색')),
+      body: Stack(
+        children: [
+          if (_controller != null) WebViewWidget(controller: _controller!),
+          if (_loading) const Center(child: CircularProgressIndicator()),
+          if (_error != null)
+            Container(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!),
+                  if (_controller != null)
+                    TextButton(onPressed: _load, child: const Text('다시 시도')),
+                ],
+              ),
             ),
-          ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 // 첨부 예제의 Daum 우편번호 검색을 Riverpod 앱의 Navigator 결과로 반환한다.

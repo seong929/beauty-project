@@ -1,3 +1,6 @@
+// 기능: 상품 사진·가격·정렬 안내·고객 하단 탭.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

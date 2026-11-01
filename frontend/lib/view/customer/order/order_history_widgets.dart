@@ -1,3 +1,6 @@
+// 기능: 구매 상품 사진·상태·금액 공용 표시.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/order.dart';

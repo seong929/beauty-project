@@ -1,5 +1,9 @@
+// 기능: 회원가입 입력·아이디 확인·성별·주소 검색.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 
 import 'package:beauty_project/model/customer/customers.dart';
 import 'package:beauty_project/vm/customer/customer_auth_validation.dart';
@@ -27,8 +31,10 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _addressDetail = TextEditingController();
-  String _gender = 'UNDISCLOSED';
-  bool _searching = false;
+  late final _formProvider = customerAuthFormProvider(this);
+  CustomerAuthFormHandler get _formActions => ref.read(_formProvider.notifier);
+  String get _gender => ref.read(_formProvider).gender;
+  bool get _searching => ref.read(_formProvider).searchingAddress;
   final _loginIdFocus = FocusNode();
   final _nameFocus = FocusNode();
   final _passwordFocus = FocusNode();
@@ -36,10 +42,11 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
   final _addressFocus = FocusNode();
   final _emailFocus = FocusNode();
   final _phoneFocus = FocusNode();
-  bool _showPassword = false;
-  bool _showConfirmation = false;
-  bool _attemptedSubmit = false;
+  bool get _showPassword => ref.read(_formProvider).showPassword;
+  bool get _showConfirmation => ref.read(_formProvider).showConfirmation;
+  bool get _attemptedSubmit => ref.read(_formProvider).attemptedSubmit;
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     for (final controller in [
@@ -73,16 +80,17 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
     _addressDetail.text.trim(),
   ].where((part) => part.isNotEmpty).join(' ');
 
+  /// Function: 주소 검색 창의 실행 상태와 취소·선택 결과를 처리한다.
   Future<void> _searchAddress() async {
     if (_searching) return;
-    setState(() => _searching = true);
+    _formActions.searchingAddress(true);
     try {
       final result = await ref.read(addressSearchLauncherProvider)(context);
       if (!mounted || result == null) return;
       _address.text = result.formatted;
       _addressDetail.clear();
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted) _formActions.searchingAddress(false);
     }
   }
 
@@ -128,9 +136,10 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
     }
   }
 
+  /// Function: 가입 폼·아이디 중복 확인을 검증하고 회원가입 VM에 전달한다.
   Future<void> _register() async {
     if (ref.read(customerRegistrationProvider).isLoading) return;
-    setState(() => _attemptedSubmit = true);
+    _formActions.attemptSubmit();
     if (!_formKey.currentState!.validate()) {
       _focusFirstInvalidField();
       return;
@@ -169,6 +178,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_formProvider);
     final registration = ref.watch(customerRegistrationProvider);
     final isBusy = registration.isLoading;
     final availability = ref.watch(loginIdAvailabilityProvider);
@@ -338,7 +348,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                       ? null
                       : () {
                           final selection = _password.selection;
-                          setState(() => _showPassword = !_showPassword);
+                          _formActions.togglePassword();
                           _passwordFocus.requestFocus();
                           if (selection.isValid) {
                             _password.selection = selection;
@@ -368,9 +378,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                       ? null
                       : () {
                           final selection = _confirmation.selection;
-                          setState(
-                            () => _showConfirmation = !_showConfirmation,
-                          );
+                          _formActions.toggleConfirmation();
                           _confirmationFocus.requestFocus();
                           if (selection.isValid) {
                             _confirmation.selection = selection;
@@ -430,7 +438,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                 onChanged: isBusy
                     ? null
                     : (value) {
-                        if (value != null) setState(() => _gender = value);
+                        if (value != null) _formActions.selectGender(value);
                       },
               ),
               const SizedBox(height: 16),

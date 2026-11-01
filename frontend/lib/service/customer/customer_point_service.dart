@@ -1,3 +1,6 @@
+// 기능: 포인트 잔액·적립·사용·취소 내역 조회 통신.
+// 통신 계층: 요청·응답 검증을 담당하고 로딩·성공·실패 표시는 VM의 AsyncValue에 맡긴다.
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:beauty_project/model/customer/point_account.dart';

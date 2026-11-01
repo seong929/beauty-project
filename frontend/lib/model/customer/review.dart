@@ -1,3 +1,6 @@
+// 기능: 고객 리뷰·별점·평균 점수.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 class CustomerReview {
   const CustomerReview({
     required this.id,

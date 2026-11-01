@@ -1,5 +1,9 @@
+// 기능: 배송 건 선택과 출고·배송·수령 진행 표시.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/order.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/delivery_handler.dart';
@@ -35,8 +39,13 @@ class CustomerDeliveryTrackingScreen extends ConsumerStatefulWidget {
 
 class _CustomerDeliveryTrackingScreenState
     extends ConsumerState<CustomerDeliveryTrackingScreen> {
-  late String? _selectedId = widget.selectedDeliveryId;
+  late final _selectionProvider = deliveryTrackingSelectionProvider((
+    screen: this,
+    initial: widget.selectedDeliveryId,
+  ));
+  String? get _selectedId => ref.read(_selectionProvider).value;
 
+  /// Function: 관련 Provider를 무효화해 최신 서버 상태를 다시 조회한다.
   void _refresh() {
     ref.invalidate(deliveryRecordsProvider(widget.orderId));
     ref.invalidate(customerOrdersProvider);
@@ -102,6 +111,7 @@ class _CustomerDeliveryTrackingScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_selectionProvider);
     final customerId = ref.watch(customerHandlerProvider).value?.customerId;
     final response = ref.watch(deliveryRecordsProvider(widget.orderId));
     final orders = ref.watch(customerOrdersProvider);
@@ -171,8 +181,9 @@ class _CustomerDeliveryTrackingScreenState
                           ChoiceChip(
                             label: Text('배송 ${i + 1}'),
                             selected: identical(records[i], delivery),
-                            onSelected: (_) =>
-                                setState(() => _selectedId = records[i].id),
+                            onSelected: (_) => ref
+                                .read(_selectionProvider.notifier)
+                                .select(records[i].id),
                           ),
                       ],
                     ),

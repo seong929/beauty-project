@@ -1,3 +1,6 @@
+// 기능: 상품 조회·카테고리·가격·재고·별점 정렬.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beauty_project/model/customer/cosmetic.dart';
@@ -15,10 +18,12 @@ final customerCatalogServiceProvider = Provider<CustomerCatalogService>(
 );
 
 class ProductHandler extends AsyncNotifier<List<Cosmetic>> {
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   Future<List<Cosmetic>> build() =>
       ref.watch(customerCatalogServiceProvider).fetchProducts();
 
+  /// Function: 예제의 AsyncValue.guard로 상품 새로고침의 성공·실패를 상태에 담는다.
   Future<void> refreshProducts() async {
     if (state.isLoading) {
       try {
@@ -88,28 +93,34 @@ class ProductFilter {
   final ProductSort sort;
   final double? minPrice;
   final double? maxPrice;
+
+  /// 카운터 예제처럼 원본 필터를 보존하고 변경한 항목만 새 객체에 복사한다.
+  /// clearPrices=true는 가격 입력을 비웠을 때 기존 범위를 해제하는 데 사용한다.
+  ProductFilter copyWith({
+    String? query,
+    String? category,
+    bool? inStockOnly,
+    ProductSort? sort,
+    double? minPrice,
+    double? maxPrice,
+    bool clearPrices = false,
+  }) => ProductFilter(
+    query: query ?? this.query,
+    category: category ?? this.category,
+    inStockOnly: inStockOnly ?? this.inStockOnly,
+    sort: sort ?? this.sort,
+    minPrice: clearPrices ? minPrice : minPrice ?? this.minPrice,
+    maxPrice: clearPrices ? maxPrice : maxPrice ?? this.maxPrice,
+  );
 }
 
 class ProductFilterHandler extends Notifier<ProductFilter> {
   @override
   ProductFilter build() => const ProductFilter();
 
-  void search(String query) => state = ProductFilter(
-    query: query,
-    category: state.category,
-    inStockOnly: state.inStockOnly,
-    sort: state.sort,
-    minPrice: state.minPrice,
-    maxPrice: state.maxPrice,
-  );
-  void selectCategory(String category) => state = ProductFilter(
-    query: state.query,
-    category: category,
-    inStockOnly: state.inStockOnly,
-    sort: state.sort,
-    minPrice: state.minPrice,
-    maxPrice: state.maxPrice,
-  );
+  void search(String query) => state = state.copyWith(query: query);
+  void selectCategory(String category) =>
+      state = state.copyWith(category: category);
   void apply({
     required bool inStockOnly,
     required ProductSort sort,

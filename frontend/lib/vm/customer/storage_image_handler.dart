@@ -1,3 +1,6 @@
+// 기능: 공용 Firebase 이미지 Riverpod Provider 재사용.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:beauty_project/model/customer/storage_image.dart';
 import '../common/storage_image_handler.dart';
 export '../common/storage_image_handler.dart';

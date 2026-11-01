@@ -1,3 +1,6 @@
+// 기능: 홈·검색 공용 상품 이미지·용량·가격 카드.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/storage_product.dart';

@@ -1,6 +1,10 @@
+// 기능: 상품 검색·필터 임시 선택·정렬·상세 이동.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/product_filter_draft_handler.dart';
 
 import 'package:beauty_project/vm/customer/product_handler.dart';
 import 'package:beauty_project/vm/customer/product_search_handler.dart';
@@ -32,6 +36,7 @@ class _CustomerProductListScreenState
     _query.text = ref.read(productFilterProvider).query;
   }
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _query.dispose();
@@ -49,6 +54,7 @@ class _CustomerProductListScreenState
     _focus.unfocus();
   }
 
+  /// Function: 필터 창에서 임시 선택을 받고 적용한 경우에만 실제 목록 조건을 바꾼다.
   Future<void> _filter() async {
     final current = ref.read(productFilterProvider);
     final formKey = GlobalKey<FormState>();
@@ -58,152 +64,165 @@ class _CustomerProductListScreenState
     final max = TextEditingController(
       text: current.maxPrice?.toStringAsFixed(0) ?? '',
     );
-    var category = customerProductFilterCategories.contains(current.category)
-        ? current.category
-        : '전체';
-    var stockOnly = current.inStockOnly;
+    final draftProvider = productFilterDraftProvider((
+      screen: Object(),
+      initial: current,
+    ));
     const categories = customerProductFilterCategories;
-    ModalRoute<bool>? sheetRoute;
+    ModalRoute<ProductFilter>? sheetRoute;
     try {
-      final applied = await showModalBottomSheet<bool>(
+      final applied = await showModalBottomSheet<ProductFilter>(
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
         builder: (context) {
-          sheetRoute = ModalRoute.of<bool>(context);
-          return StatefulBuilder(
-            builder: (context, update) => SafeArea(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  4,
-                  20,
-                  MediaQuery.viewInsetsOf(context).bottom + 24,
-                ),
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        '상품 필터',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
+          sheetRoute = ModalRoute.of<ProductFilter>(context);
+          return Consumer(
+            builder: (context, sheetRef, _) {
+              final draft = sheetRef.watch(draftProvider);
+              final actions = sheetRef.read(draftProvider.notifier);
+              return SafeArea(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    4,
+                    20,
+                    MediaQuery.viewInsetsOf(context).bottom + 24,
+                  ),
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          '상품 필터',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
-                      const Text('카테고리'),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          for (final label in categories)
-                            ChoiceChip(
-                              key: ValueKey('search-category-$label'),
-                              label: Text(label),
-                              selected: category == label,
-                              onSelected: (_) => update(() => category = label),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      const Text('가격 범위'),
-                      const SizedBox(height: 10),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              key: const Key('search-min-price'),
-                              controller: min,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: '최소 금액',
-                                suffixText: '원',
+                        const SizedBox(height: 18),
+                        const Text('카테고리'),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            for (final label in categories)
+                              ChoiceChip(
+                                key: ValueKey('search-category-$label'),
+                                label: Text(label),
+                                selected: draft.category == label,
+                                onSelected: (_) =>
+                                    actions.selectCategory(label),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        const Text('가격 범위'),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                key: const Key('search-min-price'),
+                                controller: min,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: const InputDecoration(
+                                  hintText: '최소 금액',
+                                  suffixText: '원',
+                                ),
                               ),
                             ),
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text('~'),
-                          ),
-                          Expanded(
-                            child: TextFormField(
-                              key: const Key('search-max-price'),
-                              controller: max,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: '최대 금액',
-                                suffixText: '원',
-                              ),
-                              validator: (value) {
-                                final minimum = double.tryParse(min.text);
-                                final maximum = double.tryParse(value ?? '');
-                                return minimum != null &&
-                                        maximum != null &&
-                                        minimum > maximum
-                                    ? '최소 금액 이상으로 입력해 주세요.'
-                                    : null;
-                              },
+                            const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text('~'),
                             ),
-                          ),
-                        ],
-                      ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('구매 가능한 상품만'),
-                        value: stockOnly,
-                        onChanged: (value) => update(() => stockOnly = value),
-                      ),
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => update(() {
-                              category = '전체';
-                              stockOnly = false;
-                              min.clear();
-                              max.clear();
-                            }),
-                            child: const Text('초기화'),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton(
-                              key: const Key('search-apply-filters'),
+                            Expanded(
+                              child: TextFormField(
+                                key: const Key('search-max-price'),
+                                controller: max,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: const InputDecoration(
+                                  hintText: '최대 금액',
+                                  suffixText: '원',
+                                ),
+                                validator: (value) {
+                                  final minimum = double.tryParse(min.text);
+                                  final maximum = double.tryParse(value ?? '');
+                                  return minimum != null &&
+                                          maximum != null &&
+                                          minimum > maximum
+                                      ? '최소 금액 이상으로 입력해 주세요.'
+                                      : null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('구매 가능한 상품만'),
+                          value: draft.inStockOnly,
+                          onChanged: actions.stockOnly,
+                        ),
+                        Row(
+                          children: [
+                            TextButton(
                               onPressed: () {
-                                if (formKey.currentState!.validate()) {
-                                  Navigator.pop(context, true);
-                                }
+                                actions.reset();
+                                min.clear();
+                                max.clear();
                               },
-                              child: const Text('적용하기'),
+                              child: const Text('초기화'),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                key: const Key('search-apply-filters'),
+                                onPressed: () {
+                                  if (formKey.currentState!.validate()) {
+                                    Navigator.pop(
+                                      context,
+                                      sheetRef
+                                          .read(draftProvider)
+                                          .copyWith(
+                                            minPrice: double.tryParse(min.text),
+                                            maxPrice: double.tryParse(max.text),
+                                            clearPrices: true,
+                                          ),
+                                    );
+                                  }
+                                },
+                                child: const Text('적용하기'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         },
       );
-      if (applied == true && mounted) {
+      if (applied != null && mounted) {
         final filters = ref.read(productFilterProvider.notifier);
-        filters.selectCategory(category);
+        filters.selectCategory(applied.category);
         filters.apply(
-          inStockOnly: stockOnly,
-          sort: current.sort,
-          minPrice: double.tryParse(min.text),
-          maxPrice: double.tryParse(max.text),
+          inStockOnly: applied.inStockOnly,
+          sort: applied.sort,
+          minPrice: applied.minPrice,
+          maxPrice: applied.maxPrice,
         );
       }
     } finally {

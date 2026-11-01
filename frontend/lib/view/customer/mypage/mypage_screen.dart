@@ -1,5 +1,9 @@
+// 기능: 고객 프로필·포인트·구매·배송 메뉴와 탈퇴.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
 import '../delivery/delivery_list_screen.dart';
@@ -22,11 +26,18 @@ class CustomerMyPageScreen extends ConsumerStatefulWidget {
 }
 
 class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
-  bool _busy = false;
+  late final _operationProvider = customerOperationProvider((
+    screen: this,
+    action: 'withdraw',
+  ));
+  CustomerOperationHandler get _operation =>
+      ref.read(_operationProvider.notifier);
+  bool get _busy => ref.read(_operationProvider).isLoading;
 
   void _open(Widget screen) =>
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
+  /// Function: 폼을 검증하고 로그인 VM을 호출한 뒤 성공하면 홈 화면으로 이동한다.
   void _login() => Navigator.of(context).pushAndRemoveUntil(
     MaterialPageRoute(builder: (_) => const CustomerLoginScreen()),
     (_) => false,
@@ -46,6 +57,7 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
     ),
   );
 
+  /// Function: 탈퇴 여부를 확인하고 처리 중 동작을 잠근 뒤 로그인 화면으로 이동한다.
   Future<void> _withdraw() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -66,7 +78,7 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _busy = true);
+    _operation.begin();
     try {
       await ref.read(customerHandlerProvider.notifier).withdraw();
       if (mounted) _login();
@@ -77,7 +89,7 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
         ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) _operation.finish();
     }
   }
 
@@ -110,6 +122,7 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_operationProvider);
     final customer = ref.watch(customerHandlerProvider).value;
     final orders = ref.watch(customerOrdersProvider);
     final balance =
