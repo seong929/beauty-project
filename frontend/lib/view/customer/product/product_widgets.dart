@@ -267,82 +267,143 @@ class ProductNavigation extends ConsumerWidget {
     final count = ref
         .watch(cartHandlerProvider)
         .fold<int>(0, (total, item) => total + item.quantity);
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: SodamStyle.border)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 62,
-          child: Row(
-            children: [
-              for (final (index, label, icon) in const [
-                (0, '홈', Icons.home_outlined),
-                (1, '검색', Icons.grid_view_outlined),
-                (2, '장바구니', Icons.shopping_bag_outlined),
-                (3, '내 정보', Icons.person_outline),
-              ])
-                Expanded(
-                  child: InkWell(
-                    key: ValueKey('product-nav-$index'),
-                    onTap: () {
-                      switch (index) {
-                        case 0:
-                          returnToCustomerHome(context);
-                        case 1:
-                          if (selectedIndex == 1) {
-                            onSearch();
-                          } else {
-                            showCustomerProductSearch(context);
-                          }
-                        case 2:
-                          if (onCart != null) {
-                            onCart!();
-                          } else {
-                            showCustomerPreviewCart(context);
-                          }
-                        case 3:
-                          showCustomerProductProfile(context, ref);
-                      }
-                    },
-                    child: Semantics(
-                      selected: index == selectedIndex,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Badge(
-                            isLabelVisible: index == 2 && count > 0,
-                            label: Text('$count'),
-                            child: Icon(
-                              icon,
-                              size: 20,
-                              color: index == selectedIndex
-                                  ? SodamStyle.ink
-                                  : SodamStyle.muted,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: index == selectedIndex
-                                  ? SodamStyle.green
-                                  : SodamStyle.muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+    return buildCustomerNavigationBar(
+      selectedIndex: selectedIndex,
+      cartCount: count,
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            returnToCustomerHome(context);
+          case 1:
+            if (selectedIndex == 1) {
+              onSearch();
+            } else {
+              showCustomerProductSearch(context);
+            }
+          case 2:
+            if (onCart != null) {
+              onCart!();
+            } else {
+              showCustomerPreviewCart(context);
+            }
+          case 3:
+            showCustomerProductProfile(context, ref);
+        }
+      },
+    );
+  }
+}
+
+/// Function: 홈과 고객 화면에서 같은 둥근 하단 메뉴를 사용한다.
+/// 기존 탭·장바구니 수량·Key·화면 이동 콜백은 유지하고 선택 탭에 회색 배경을 표시한다.
+Widget buildCustomerNavigationBar({
+  required int selectedIndex,
+  required int cartCount,
+  required ValueChanged<int> onTap,
+  String keyPrefix = 'product-nav',
+}) {
+  return SafeArea(
+    top: false,
+    minimum: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+    child: Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x24000000),
+                blurRadius: 24,
+                offset: Offset(0, 6),
+              ),
             ],
+          ),
+          child: Material(
+            key: ValueKey('$keyPrefix-bar'),
+            color: const Color(0xFAFFFFFF),
+            borderRadius: BorderRadius.circular(40),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(5),
+              child: SizedBox(
+                height: 64,
+                child: Row(
+                  children: [
+                    for (final (index, label, icon, selectedIcon) in const [
+                      (0, '홈', Icons.home_outlined, Icons.home_rounded),
+                      (
+                        1,
+                        '검색',
+                        Icons.grid_view_outlined,
+                        Icons.grid_view_rounded,
+                      ),
+                      (
+                        2,
+                        '장바구니',
+                        Icons.shopping_bag_outlined,
+                        Icons.shopping_bag,
+                      ),
+                      (3, '내 정보', Icons.person_outline, Icons.person),
+                    ])
+                      Expanded(
+                        child: Semantics(
+                          selected: index == selectedIndex,
+                          button: true,
+                          child: Material(
+                            color: index == selectedIndex
+                                ? const Color(0xFFEDEDED)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(32),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              key: ValueKey('$keyPrefix-$index'),
+                              onTap: () => onTap(index),
+                              child: SizedBox.expand(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Badge(
+                                      isLabelVisible:
+                                          index == 2 && cartCount > 0,
+                                      label: Text('$cartCount'),
+                                      child: Icon(
+                                        index == selectedIndex
+                                            ? selectedIcon
+                                            : icon,
+                                        size: 26,
+                                        color: SodamStyle.ink,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      label,
+                                      maxLines: 1,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: index == selectedIndex
+                                            ? FontWeight.w700
+                                            : FontWeight.w400,
+                                        color: SodamStyle.ink,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 // 변경 내용(2026-10-30): 상품 사진의 찜 버튼과 찜 위젯을 제거했다.

@@ -123,6 +123,10 @@ void main() {
     'home shows sample product photos, names and prices and supports search',
     (tester) async {
       final container = await pumpHome(tester);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('하나')),
+        findsNothing,
+      );
       expect(find.byKey(const Key('home-hero')), findsOneWidget);
       await tester.enterText(find.byKey(const Key('home-search')), '데일리 보습');
       await tester.pumpAndSettle();
@@ -215,6 +219,23 @@ void main() {
     await tester.tap(find.byKey(const Key('home-nav-2')));
     await tester.pumpAndSettle();
     expect(find.text('장바구니가 비어 있어요.'), findsOneWidget);
+  });
+
+  testWidgets('home cart button sits beside the filter and opens the cart', (
+    tester,
+  ) async {
+    await pumpHome(tester, size: const Size(320, 568));
+    final filter = tester.getRect(find.byKey(const Key('home-filter')));
+    final cart = tester.getRect(find.byKey(const Key('home-cart')));
+    expect(cart.left, greaterThan(filter.right));
+    expect(cart.center.dy, closeTo(filter.center.dy, 1));
+    expect(find.byType(AppBar), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const Key('home-cart')));
+    await tester.pumpAndSettle();
+    expect(find.text('장바구니가 비어 있어요.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
