@@ -7,6 +7,7 @@ import 'package:beauty_project/model/customer/order.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
+import 'package:beauty_project/vm/customer/customer_profile_photo_handler.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
 import '../delivery/delivery_list_screen.dart';
 import '../login/customer_auth_widgets.dart';
@@ -197,13 +198,13 @@ class _CustomerMyPageScreenState extends ConsumerState<CustomerMyPageScreen> {
     ),
     child: Row(
       children: [
-        const CircleAvatar(
+        // 고객번호별로 저장된 사진을 구독해 개인정보 수정 후 즉시 반영한다.
+        buildCustomerProfileAvatar(
+          key: const Key('mypage-profile-photo'),
+          bytes: ref
+              .watch(customerProfilePhotoProvider(customer.customerId))
+              .value,
           radius: 28,
-          backgroundColor: Color(0xFFD6F4F6),
-          child: Text(
-            '하나',
-            style: TextStyle(fontSize: 16, color: SodamStyle.green),
-          ),
         ),
         const SizedBox(width: 18),
         Expanded(
