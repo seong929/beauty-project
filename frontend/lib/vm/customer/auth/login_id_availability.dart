@@ -1,3 +1,6 @@
+// 기능: 아이디 중복 확인과 입력 변경 시 확인 무효화.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../customer_auth_validation.dart';
 import '../customer_providers.dart';

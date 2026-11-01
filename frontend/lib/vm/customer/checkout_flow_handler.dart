@@ -1,3 +1,6 @@
+// 기능: 주문 단계·배송 요청·결제 수단·최종 동의.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'cart_handler.dart';
 import 'checkout_handler.dart';

@@ -1,5 +1,9 @@
+// 기능: 회원가입 UI와 리소스·상태·검증·요청·화면 이동을 한 파일에서 관리한다.
+// build()의 구간 주석 순서대로 입력 UI를 수정하고, 동작은 전용 함수에서 처리한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 
 import 'package:beauty_project/model/customer/customers.dart';
 import 'package:beauty_project/vm/customer/customer_auth_validation.dart';
@@ -17,6 +21,7 @@ class CustomerSignupScreen extends ConsumerStatefulWidget {
 }
 
 class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
+  // 입력 리소스는 이 화면에서 생성하고 dispose한다.
   final _formKey = GlobalKey<FormState>();
   final _idKey = GlobalKey<FormFieldState<String>>();
   final _loginId = TextEditingController();
@@ -27,8 +32,10 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _addressDetail = TextEditingController();
-  String _gender = 'UNDISCLOSED';
-  bool _searching = false;
+  late final _formProvider = customerAuthFormProvider(this);
+  CustomerAuthFormHandler get _formActions => ref.read(_formProvider.notifier);
+  String get _gender => ref.read(_formProvider).gender;
+  bool get _searching => ref.read(_formProvider).searchingAddress;
   final _loginIdFocus = FocusNode();
   final _nameFocus = FocusNode();
   final _passwordFocus = FocusNode();
@@ -36,10 +43,11 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
   final _addressFocus = FocusNode();
   final _emailFocus = FocusNode();
   final _phoneFocus = FocusNode();
-  bool _showPassword = false;
-  bool _showConfirmation = false;
-  bool _attemptedSubmit = false;
+  bool get _showPassword => ref.read(_formProvider).showPassword;
+  bool get _showConfirmation => ref.read(_formProvider).showConfirmation;
+  bool get _attemptedSubmit => ref.read(_formProvider).attemptedSubmit;
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     for (final controller in [
@@ -73,30 +81,34 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
     _addressDetail.text.trim(),
   ].where((part) => part.isNotEmpty).join(' ');
 
+  /// Function: 주소 검색 창의 실행 상태와 취소·선택 결과를 처리한다.
   Future<void> _searchAddress() async {
     if (_searching) return;
-    setState(() => _searching = true);
+    _formActions.searchingAddress(true);
     try {
       final result = await ref.read(addressSearchLauncherProvider)(context);
       if (!mounted || result == null) return;
       _address.text = result.formatted;
       _addressDetail.clear();
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted) _formActions.searchingAddress(false);
     }
   }
 
+  /// Function: 아이디 변경 시 기존 중복 확인 결과와 가입 오류를 정리한다.
   void _loginEdited(String value) {
     ref.read(loginIdAvailabilityProvider.notifier).edit(value);
     _clearError(value);
   }
 
+  /// Function: 입력 수정 후 기존 가입 실패 안내를 지운다.
   void _clearError(String _) {
     if (!ref.read(customerRegistrationProvider).hasError) return;
     ref.read(customerRegistrationProvider.notifier).clearError();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
   }
 
+  /// Function: 제출 시 첫 번째 유효하지 않은 입력으로 포커스와 스크롤을 이동한다.
   void _focusFirstInvalidField() {
     final fields = <(String?, FocusNode)>[
       (CustomerAuthValidation.loginId(_loginId.text), _loginIdFocus),
@@ -128,9 +140,10 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
     }
   }
 
+  /// Function: 가입 폼·아이디 중복 확인을 검증하고 회원가입 VM에 전달한다.
   Future<void> _register() async {
     if (ref.read(customerRegistrationProvider).isLoading) return;
-    setState(() => _attemptedSubmit = true);
+    _formActions.attemptSubmit();
     if (!_formKey.currentState!.validate()) {
       _focusFirstInvalidField();
       return;
@@ -167,8 +180,56 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
     Navigator.of(context).pop(registration.loginId.trim());
   }
 
+  /// Function: 비밀번호·비밀번호 확인의 같은 입력 UI와 표시 버튼을 재사용한다.
+  Widget _buildPasswordField({
+    required bool confirmation,
+    required bool isBusy,
+  }) {
+    final visible = confirmation ? _showConfirmation : _showPassword;
+    return CustomerField(
+      label: confirmation ? '비밀번호 확인' : '비밀번호',
+      fieldKey: confirmation
+          ? const Key('signup-confirmation')
+          : const Key('signup-password'),
+      controller: confirmation ? _confirmation : _password,
+      focusNode: confirmation ? _confirmationFocus : _passwordFocus,
+      isPassword: true,
+      onChanged: _clearError,
+      onSubmitted: (_) =>
+          (confirmation ? _addressFocus : _confirmationFocus).requestFocus(),
+      enabled: !isBusy,
+      validator: confirmation
+          ? (value) =>
+                CustomerAuthValidation.confirmPassword(value, _password.text)
+          : CustomerAuthValidation.password,
+      obscureText: !visible,
+      suffix: CustomerPasswordToggle(
+        visible: visible,
+        onPressed: isBusy
+            ? null
+            : () => _togglePasswordVisibility(confirmation),
+      ),
+      autofillHints: const [AutofillHints.newPassword],
+    );
+  }
+
+  /// Function: 비밀번호 표시 상태를 바꾸고 해당 입력의 포커스·커서 위치를 보존한다.
+  void _togglePasswordVisibility(bool confirmation) {
+    final controller = confirmation ? _confirmation : _password;
+    final focus = confirmation ? _confirmationFocus : _passwordFocus;
+    final selection = controller.selection;
+    if (confirmation) {
+      _formActions.toggleConfirmation();
+    } else {
+      _formActions.togglePassword();
+    }
+    focus.requestFocus();
+    if (selection.isValid) controller.selection = selection;
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.watch(_formProvider);
     final registration = ref.watch(customerRegistrationProvider);
     final isBusy = registration.isLoading;
     final availability = ref.watch(loginIdAvailabilityProvider);
@@ -187,6 +248,7 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // 안내 문구·가입 오류
               const Text(
                 '하나와 함께해요',
                 textAlign: TextAlign.center,
@@ -209,6 +271,8 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
               ),
               const SizedBox(height: 24),
               CustomerAuthError(error.isEmpty ? null : error),
+
+              // 아이디: 입력·중복 확인·확인 결과 표시
               const Padding(
                 padding: EdgeInsets.only(left: 20),
                 child: CustomerFieldLabel('고객 아이디', textAlign: TextAlign.left),
@@ -309,6 +373,8 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                     ),
                   ),
                 ),
+
+              // 이름
               CustomerField(
                 label: '이름',
                 fieldKey: const Key('signup-name'),
@@ -321,65 +387,14 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                 autofillHints: const [AutofillHints.name],
               ),
               const SizedBox(height: 16),
-              CustomerField(
-                label: '비밀번호',
-                fieldKey: const Key('signup-password'),
-                controller: _password,
-                focusNode: _passwordFocus,
-                isPassword: true,
-                onChanged: _clearError,
-                onSubmitted: (_) => _confirmationFocus.requestFocus(),
-                enabled: !isBusy,
-                validator: CustomerAuthValidation.password,
-                obscureText: !_showPassword,
-                suffix: CustomerPasswordToggle(
-                  visible: _showPassword,
-                  onPressed: isBusy
-                      ? null
-                      : () {
-                          final selection = _password.selection;
-                          setState(() => _showPassword = !_showPassword);
-                          _passwordFocus.requestFocus();
-                          if (selection.isValid) {
-                            _password.selection = selection;
-                          }
-                        },
-                ),
-                autofillHints: const [AutofillHints.newPassword],
-              ),
+
+              // 비밀번호·비밀번호 확인: 반복되는 입력 UI는 공통 함수 사용
+              _buildPasswordField(confirmation: false, isBusy: isBusy),
               const SizedBox(height: 16),
-              CustomerField(
-                label: '비밀번호 확인',
-                fieldKey: const Key('signup-confirmation'),
-                controller: _confirmation,
-                focusNode: _confirmationFocus,
-                isPassword: true,
-                onChanged: _clearError,
-                onSubmitted: (_) => _addressFocus.requestFocus(),
-                enabled: !isBusy,
-                validator: (value) => CustomerAuthValidation.confirmPassword(
-                  value,
-                  _password.text,
-                ),
-                obscureText: !_showConfirmation,
-                suffix: CustomerPasswordToggle(
-                  visible: _showConfirmation,
-                  onPressed: isBusy
-                      ? null
-                      : () {
-                          final selection = _confirmation.selection;
-                          setState(
-                            () => _showConfirmation = !_showConfirmation,
-                          );
-                          _confirmationFocus.requestFocus();
-                          if (selection.isValid) {
-                            _confirmation.selection = selection;
-                          }
-                        },
-                ),
-                autofillHints: const [AutofillHints.newPassword],
-              ),
+              _buildPasswordField(confirmation: true, isBusy: isBusy),
               const SizedBox(height: 16),
+
+              // 주소: 기본 주소·검색·상세주소
               CustomerField(
                 label: '기본 주소',
                 fieldKey: const Key('signup-address'),
@@ -410,6 +425,8 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                     : null,
               ),
               const SizedBox(height: 16),
+
+              // 성별: 선택 입력
               const CustomerFieldLabel('성별 (선택)'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
@@ -430,10 +447,12 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                 onChanged: isBusy
                     ? null
                     : (value) {
-                        if (value != null) setState(() => _gender = value);
+                        if (value != null) _formActions.selectGender(value);
                       },
               ),
               const SizedBox(height: 16),
+
+              // 연락처: 이메일·전화번호·마지막 입력에서 가입 실행
               CustomerField(
                 label: '이메일',
                 fieldKey: const Key('signup-email'),
@@ -465,6 +484,8 @@ class _CustomerSignupScreenState extends ConsumerState<CustomerSignupScreen> {
                 },
               ),
               const SizedBox(height: 24),
+
+              // 가입 버튼: 요청 중 비활성화·로딩 표시·로그인 화면 복귀
               CustomerSubmitButton(
                 key: const Key('signup-submit'),
                 label: '가입하기',

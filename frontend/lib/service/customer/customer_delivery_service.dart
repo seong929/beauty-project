@@ -1,3 +1,6 @@
+// 기능: 배송 현황 조회와 주문 배송 정보 수정 통신.
+// 통신 계층: 요청·응답 검증을 담당하고 로딩·성공·실패 표시는 VM의 AsyncValue에 맡긴다.
+
 import 'dart:async';
 import 'dart:convert';
 

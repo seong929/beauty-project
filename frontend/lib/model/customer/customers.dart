@@ -1,3 +1,6 @@
+// 기능: 고객 회원 정보와 API JSON 변환.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 class Customers {
   final String customerId;
   final String loginId;

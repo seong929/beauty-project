@@ -1,5 +1,9 @@
+// 기능: 출고 전 주문의 수령인·연락처·주소·요청사항 수정.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/delivery_order.dart';
 import 'package:beauty_project/model/customer/shipping_address.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
@@ -16,13 +20,19 @@ class CustomerDeliveryAddressScreen extends ConsumerStatefulWidget {
 
 class _CustomerDeliveryAddressScreenState
     extends ConsumerState<CustomerDeliveryAddressScreen> {
-  bool _busy = false;
+  late final _operationProvider = customerOperationProvider((
+    screen: this,
+    action: 'delivery-address',
+  ));
+  CustomerOperationHandler get _operation =>
+      ref.read(_operationProvider.notifier);
+  bool get _busy => ref.read(_operationProvider).isLoading;
 
   Future<void> _change(DeliveryOrder order) async {
     if (_busy) return;
     final customer = ref.read(customerHandlerProvider).value;
     if (customer == null) return;
-    setState(() => _busy = true);
+    _operation.begin();
     try {
       final address = await showShippingAddressSheet(
         context,
@@ -60,12 +70,13 @@ class _CustomerDeliveryAddressScreenState
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) _operation.finish();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_operationProvider);
     final orders = ref.watch(deliveryOrdersProvider);
     return Scaffold(
       appBar: AppBar(

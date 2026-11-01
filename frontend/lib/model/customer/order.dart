@@ -1,3 +1,6 @@
+// 기능: 주문·주문 상품·포인트 사용 금액.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 class CustomerOrderLine {
   const CustomerOrderLine({
     required this.id,

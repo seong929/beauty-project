@@ -1,3 +1,6 @@
+// 기능: 반품 신청·조회·중복 신청 방지.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/order.dart';
 import 'package:beauty_project/model/customer/return_request.dart';
@@ -42,6 +45,7 @@ class CustomerReturnHandler extends AsyncNotifier<CustomerReturnRequest?> {
   String? activeItemId;
   bool reviewRequired(String itemId) => _uncertainItems.contains(itemId);
 
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   CustomerReturnRequest? build() {
     ref.watch(

@@ -1,3 +1,6 @@
+// 기능: 주문 취소와 구매·배송·포인트·재고 캐시 갱신.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'customer_handler.dart';
 import 'order_handler.dart';
@@ -6,6 +9,7 @@ import 'point_handler.dart';
 import 'product_handler.dart';
 
 class CustomerOrderCancellationHandler extends AsyncNotifier<String?> {
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   String? build() {
     ref.watch(
@@ -38,6 +42,7 @@ class CustomerOrderCancellationHandler extends AsyncNotifier<String?> {
   bool _sameCustomer(String id) =>
       ref.mounted && ref.read(customerHandlerProvider).value?.customerId == id;
 
+  /// Function: 관련 Provider를 무효화해 최신 서버 상태를 다시 조회한다.
   void _refresh(String orderId) {
     ref.invalidate(customerOrdersProvider);
     ref.invalidate(deliveryOrdersProvider);

@@ -1,3 +1,6 @@
+// 기능: 장바구니 선택·옵션·수량의 불변 상태 갱신.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beauty_project/model/customer/cart_item.dart';
@@ -5,6 +8,7 @@ import 'package:beauty_project/model/customer/home_product.dart';
 
 // 화면 상태 관리. 서버 저장·조회·삭제는 CartPersistenceHandler에서 처리한다.
 class CartHandler extends Notifier<List<CustomerCartItem>> {
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   List<CustomerCartItem> build() => const [];
 
@@ -48,11 +52,13 @@ class CartHandler extends Notifier<List<CustomerCartItem>> {
           : item,
   ];
 
+  /// Function: 가격이 확인된 장바구니 상품의 선택 여부를 새 목록으로 반영한다.
   void selectAll(bool selected) => state = [
     for (final item in state)
       item.copyWith(selected: selected && item.product.hasKnownPrice),
   ];
 
+  /// Function: 허용 수량 범위 안에서 해당 장바구니 행을 copyWith로 교체한다.
   void setQuantity(String key, int quantity) {
     if (quantity < 1 || quantity > 99) return;
     state = [
@@ -61,6 +67,7 @@ class CartHandler extends Notifier<List<CustomerCartItem>> {
     ];
   }
 
+  /// Function: 선택 옵션을 변경하고 같은 옵션 행이 있으면 수량을 합친다.
   bool changeOption(String key, HomeProductOption option) {
     final source = state.where((item) => item.key == key).firstOrNull;
     if (source == null ||
@@ -95,6 +102,7 @@ class CartHandler extends Notifier<List<CustomerCartItem>> {
 
   void clear() => state = const [];
 
+  /// Function: 서버 조회 결과를 읽기 전용 장바구니 목록으로 반영한다.
   void replaceFromServer(List<CustomerCartItem> items) =>
       state = List.unmodifiable(items);
 }

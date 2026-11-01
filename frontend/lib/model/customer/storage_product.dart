@@ -1,3 +1,6 @@
+// 기능: Firebase 이미지와 실제 판매 상품의 연결.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 import 'cosmetic.dart';
 import 'home_product.dart';
 import 'storage_image.dart';

@@ -1,3 +1,6 @@
+// 기능: 로그인한 고객·로그인 요청·프로필·탈퇴 관리.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,9 +15,11 @@ import 'product_search_handler.dart';
 // 첨부 Riverpod 예제처럼 AsyncValue가 로딩·성공·실패 상태를 관리한다.
 // data(null): 비로그인, data(Customers): 로그인한 고객 정보.
 class CustomerHandler extends AsyncNotifier<Customers?> {
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   FutureOr<Customers?> build() => null;
 
+  /// Function: 로그인 요청을 AsyncValue로 감싸 로딩·고객 정보·실패를 구분한다.
   Future<bool> login({
     required String loginId,
     required String password,
@@ -43,6 +48,7 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
     if (!state.isLoading && state.hasError) state = const AsyncData(null);
   }
 
+  /// Function: 회원 정보 저장 후 현재 로그인 고객이 같을 때만 프로필을 갱신한다.
   Future<void> updateProfile({
     required String name,
     required String email,
@@ -75,6 +81,7 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
     );
   }
 
+  /// Function: 서버가 확인한 포인트 잔액으로 로그인 고객 정보의 새 객체를 만든다.
   void updatePointsBalance(int balance) {
     final customer = state.value;
     if (customer != null && balance >= 0) {
@@ -84,6 +91,7 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
     }
   }
 
+  /// Function: 로그인한 고객의 탈퇴 요청을 처리한다.
   Future<void> withdraw() async {
     final customer = state.value;
     if (customer == null) throw const CustomerAuthException('다시 로그인해 주세요.');
@@ -91,6 +99,7 @@ class CustomerHandler extends AsyncNotifier<Customers?> {
     if (ref.mounted && state.value?.customerId == customer.customerId) logout();
   }
 
+  /// Function: 고객 로그인 상태와 고객별 장바구니·최근 검색 상태를 초기화한다.
   void logout() {
     if (!state.isLoading) {
       state = const AsyncData(null);

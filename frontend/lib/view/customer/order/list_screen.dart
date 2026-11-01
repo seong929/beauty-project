@@ -1,5 +1,9 @@
+// 기능: 구매 내역 검색·주문 상태 필터·구매 상세 이동.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/vm/customer/order_handler.dart';
 import '../login/customer_auth_widgets.dart';
 import '../product/product_list.dart';
@@ -19,7 +23,8 @@ class CustomerOrderListScreen extends ConsumerStatefulWidget {
 class _CustomerOrderListScreenState
     extends ConsumerState<CustomerOrderListScreen> {
   final _search = TextEditingController();
-  String _status = 'ALL';
+  late final _listProvider = customerOrderListUiProvider(this);
+  String get _status => ref.read(_listProvider).status;
   static const _statuses = [
     'ALL',
     'PENDING',
@@ -31,12 +36,14 @@ class _CustomerOrderListScreenState
     'RETURNED',
   ];
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _search.dispose();
     super.dispose();
   }
 
+  /// Function: 필터 창에서 임시 선택을 받고 적용한 경우에만 실제 목록 조건을 바꾼다.
   Future<void> _filter() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
@@ -69,11 +76,14 @@ class _CustomerOrderListScreenState
         ),
       ),
     );
-    if (mounted && selected != null) setState(() => _status = selected);
+    if (mounted && selected != null) {
+      ref.read(_listProvider.notifier).filter(selected);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final listState = ref.watch(_listProvider);
     final orders = ref.watch(customerOrdersProvider);
     return Scaffold(
       key: const Key('customer-order-list'),
@@ -105,19 +115,23 @@ class _CustomerOrderListScreenState
                       child: TextField(
                         key: const Key('order-history-search'),
                         controller: _search,
-                        onChanged: (_) => setState(() {}),
+                        onChanged: (value) =>
+                            ref.read(_listProvider.notifier).search(value),
                         textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
                           hintText: '상품 이름 검색',
                           prefixIcon: const Icon(Icons.search, size: 20),
                           filled: true,
                           fillColor: const Color(0xFFF6F7F8),
-                          suffixIcon: _search.text.isEmpty
+                          suffixIcon: listState.query.isEmpty
                               ? null
                               : IconButton(
                                   tooltip: '검색 초기화',
                                   icon: const Icon(Icons.close),
-                                  onPressed: () => setState(_search.clear),
+                                  onPressed: () {
+                                    _search.clear();
+                                    ref.read(_listProvider.notifier).search('');
+                                  },
                                 ),
                         ),
                       ),
@@ -144,7 +158,7 @@ class _CustomerOrderListScreenState
                     ),
                   ),
                   data: (items) {
-                    final query = _search.text.trim().toLowerCase();
+                    final query = listState.query.trim().toLowerCase();
                     final filtered = items
                         .where(
                           (order) =>

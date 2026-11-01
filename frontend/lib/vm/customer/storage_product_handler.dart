@@ -1,3 +1,6 @@
+// 기능: Firebase 사진과 DB 상품을 연결한 고객 상품 목록.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/model/customer/storage_image.dart';

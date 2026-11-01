@@ -1,3 +1,6 @@
+// 기능: 배송 조회·주문 배송 정보 저장과 관련 캐시 갱신.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/delivery_order.dart';
 import 'package:beauty_project/model/customer/delivery.dart';

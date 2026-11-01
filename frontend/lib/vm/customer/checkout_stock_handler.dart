@@ -1,3 +1,6 @@
+// 기능: 상품별 최신 재고 검증과 결제 차단 판단.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'cart_handler.dart';

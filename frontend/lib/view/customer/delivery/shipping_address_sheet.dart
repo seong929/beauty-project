@@ -1,5 +1,9 @@
+// 기능: 우편번호 검색·상세주소·수령인 정보 입력 창.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/shipping_address.dart';
 import 'package:beauty_project/vm/customer/customer_auth_validation.dart';
 import 'address_search_screen.dart';
@@ -50,7 +54,13 @@ class ShippingAddressSheetState extends ConsumerState<ShippingAddressSheet> {
   late final _request = TextEditingController(
     text: widget.initial?.deliveryRequest ?? '',
   );
-  bool _searching = false;
+  late final _operationProvider = customerOperationProvider((
+    screen: this,
+    action: 'shipping-postal',
+  ));
+  CustomerOperationHandler get _operation =>
+      ref.read(_operationProvider.notifier);
+  bool get _searching => ref.read(_operationProvider).isLoading;
 
   String get _fullAddress => [
     _address.text.trim(),
@@ -59,17 +69,18 @@ class ShippingAddressSheetState extends ConsumerState<ShippingAddressSheet> {
 
   Future<void> _search() async {
     if (_searching) return;
-    setState(() => _searching = true);
+    _operation.begin();
     try {
       final result = await ref.read(addressSearchLauncherProvider)(context);
       if (!mounted || result == null) return;
       _address.text = result.formatted;
       _detail.clear();
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted) _operation.finish();
     }
   }
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _recipient.dispose();
@@ -81,104 +92,107 @@ class ShippingAddressSheetState extends ConsumerState<ShippingAddressSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        4,
-        20,
-        MediaQuery.viewInsetsOf(context).bottom + 24,
-      ),
-      child: Form(
-        key: _form,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              '배송지 변경',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 16),
-            if (widget.includeRecipient) ...[
-              TextFormField(
-                key: const Key('shipping-recipient'),
-                controller: _recipient,
-                decoration: const InputDecoration(labelText: '받는 분'),
-                validator: CustomerAuthValidation.name,
-                textInputAction: TextInputAction.next,
+  Widget build(BuildContext context) {
+    ref.watch(_operationProvider);
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 24,
+        ),
+        child: Form(
+          key: _form,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '배송지 변경',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('shipping-phone'),
-                controller: _phone,
-                decoration: const InputDecoration(labelText: '연락처'),
-                validator: CustomerAuthValidation.phone,
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.next,
+              const SizedBox(height: 16),
+              if (widget.includeRecipient) ...[
+                TextFormField(
+                  key: const Key('shipping-recipient'),
+                  controller: _recipient,
+                  decoration: const InputDecoration(labelText: '받는 분'),
+                  validator: CustomerAuthValidation.name,
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const Key('shipping-phone'),
+                  controller: _phone,
+                  decoration: const InputDecoration(labelText: '연락처'),
+                  validator: CustomerAuthValidation.phone,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+              ],
+              OutlinedButton.icon(
+                key: const Key('search-shipping-address'),
+                onPressed: _searching ? null : _search,
+                icon: const Icon(Icons.search),
+                label: const Text('우편번호 · 주소 검색'),
               ),
-              const SizedBox(height: 12),
-            ],
-            OutlinedButton.icon(
-              key: const Key('search-shipping-address'),
-              onPressed: _searching ? null : _search,
-              icon: const Icon(Icons.search),
-              label: const Text('우편번호 · 주소 검색'),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              key: const Key('shipping-address'),
-              controller: _address,
-              decoration: const InputDecoration(
-                labelText: '배송 주소',
-                helperText: '검색하거나 직접 입력해 주세요.',
-              ),
-              maxLines: 2,
-              maxLength: 500,
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? '배송 주소를 입력해 주세요.'
-                  : _fullAddress.length > 500
-                  ? '상세주소를 포함해 500자 이내로 입력해 주세요.'
-                  : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              key: const Key('shipping-address-detail'),
-              controller: _detail,
-              decoration: const InputDecoration(labelText: '상세주소 (동·호수 등)'),
-              maxLength: 200,
-              textInputAction: TextInputAction.done,
-            ),
-            const SizedBox(height: 16),
-            if (widget.includeRequest) ...[
+              const SizedBox(height: 8),
               TextFormField(
-                key: const Key('shipping-request'),
-                controller: _request,
-                decoration: const InputDecoration(labelText: '배송 요청사항 (선택)'),
-                maxLength: 200,
+                key: const Key('shipping-address'),
+                controller: _address,
+                decoration: const InputDecoration(
+                  labelText: '배송 주소',
+                  helperText: '검색하거나 직접 입력해 주세요.',
+                ),
                 maxLines: 2,
+                maxLength: 500,
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? '배송 주소를 입력해 주세요.'
+                    : _fullAddress.length > 500
+                    ? '상세주소를 포함해 500자 이내로 입력해 주세요.'
+                    : null,
               ),
               const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('shipping-address-detail'),
+                controller: _detail,
+                decoration: const InputDecoration(labelText: '상세주소 (동·호수 등)'),
+                maxLength: 200,
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 16),
+              if (widget.includeRequest) ...[
+                TextFormField(
+                  key: const Key('shipping-request'),
+                  controller: _request,
+                  decoration: const InputDecoration(labelText: '배송 요청사항 (선택)'),
+                  maxLength: 200,
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 12),
+              ],
+              FilledButton(
+                key: const Key('save-shipping-address'),
+                onPressed: () {
+                  if (!_form.currentState!.validate()) return;
+                  Navigator.pop(
+                    context,
+                    ShippingAddress(
+                      recipient: _recipient.text.trim(),
+                      phone: _phone.text.trim(),
+                      address: _fullAddress,
+                      deliveryRequest: _request.text.trim(),
+                    ),
+                  );
+                },
+                child: const Text('배송지 저장'),
+              ),
             ],
-            FilledButton(
-              key: const Key('save-shipping-address'),
-              onPressed: () {
-                if (!_form.currentState!.validate()) return;
-                Navigator.pop(
-                  context,
-                  ShippingAddress(
-                    recipient: _recipient.text.trim(),
-                    phone: _phone.text.trim(),
-                    address: _fullAddress,
-                    deliveryRequest: _request.text.trim(),
-                  ),
-                );
-              },
-              child: const Text('배송지 저장'),
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

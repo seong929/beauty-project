@@ -1,3 +1,6 @@
+// 기능: 포인트 잔액과 적립·사용·복원 내역.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 class CustomerPointEntry {
   const CustomerPointEntry({
     required this.id,

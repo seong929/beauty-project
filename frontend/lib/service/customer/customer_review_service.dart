@@ -1,3 +1,6 @@
+// 기능: 리뷰 등록·수정·삭제·별점 조회 통신.
+// 통신 계층: 요청·응답 검증을 담당하고 로딩·성공·실패 표시는 VM의 AsyncValue에 맡긴다.
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;

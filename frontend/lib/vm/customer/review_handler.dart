@@ -1,3 +1,6 @@
+// 기능: 상품·고객 리뷰 조회와 리뷰 변경 후 별점 갱신.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/review.dart';
 import 'package:beauty_project/service/customer/customer_auth_service.dart';
@@ -45,6 +48,8 @@ final eligibleReviewProductsProvider = FutureProvider<Set<String>>((ref) {
 
 class ReviewMutationHandler extends AsyncNotifier<void> {
   String? activeProductId;
+
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   void build() {
     ref.watch(
@@ -110,6 +115,7 @@ class ReviewMutationHandler extends AsyncNotifier<void> {
     }
   }
 
+  /// Function: 관련 Provider를 무효화해 최신 서버 상태를 다시 조회한다.
   void _refresh(String productId) {
     ref.invalidate(productReviewsProvider(productId));
     ref.invalidate(customerReviewsProvider);

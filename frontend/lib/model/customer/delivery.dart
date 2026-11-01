@@ -1,3 +1,6 @@
+// 기능: 주문별 배송 기록과 진행 상태.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 class CustomerDelivery {
   const CustomerDelivery({
     required this.orderId,

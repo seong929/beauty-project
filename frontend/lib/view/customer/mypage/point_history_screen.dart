@@ -1,3 +1,6 @@
+// 기능: 포인트 잔액·사용·적립·복원 내역 표시.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/vm/customer/point_handler.dart';

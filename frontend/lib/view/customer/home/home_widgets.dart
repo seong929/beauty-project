@@ -1,150 +1,38 @@
+// 기능: 홈 배너·Firebase 상품 사진·카테고리 버튼.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/storage_image_handler.dart';
+import 'storage_product_image.dart';
 
 import '../login/customer_auth_widgets.dart';
 
 const homeSage = Color(0xFFEEFAFB);
 const homeMuted = Color(0xFF8B9096);
 
-// 배너의 장식용 하나 병 일러스트. 상품 사진으로 사용하지 않는다.
-class SodamBottle extends StatelessWidget {
-  const SodamBottle({super.key});
-
-  @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: SizedBox(
-      width: 104,
-      height: 166,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Positioned(
-            bottom: 1,
-            child: Container(
-              width: 86,
-              height: 10,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: SodamStyle.green.withValues(alpha: .18),
-                    blurRadius: 14,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            child: Container(
-              width: 39,
-              height: 33,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFFFF),
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 27,
-            child: Container(
-              width: 51,
-              height: 17,
-              decoration: BoxDecoration(
-                color: const Color(0xFF85D8DF),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 39,
-            bottom: 7,
-            child: Container(
-              width: 78,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(13),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFFB5E9ED),
-                    Color(0xFFF5FDFE),
-                    Color(0xFF92DBE1),
-                  ],
-                ),
-                border: Border.all(
-                  color: const Color(0xFF85D8DF).withValues(alpha: .5),
-                ),
-              ),
-              child: Center(
-                child: Container(
-                  width: 62,
-                  height: 63,
-                  color: Colors.white,
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '하나',
-                        style: TextStyle(fontSize: 15, color: SodamStyle.green),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'SOFT & CALM',
-                        style: TextStyle(
-                          fontSize: 4,
-                          letterSpacing: 1,
-                          color: homeMuted,
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        'DAILY ESSENCE',
-                        style: TextStyle(
-                          fontSize: 4,
-                          letterSpacing: .6,
-                          color: homeMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class HomeHero extends StatelessWidget {
+/// Firebase에 등록된 상품 사진을 배너의 이미지로 사용한다.
+class HomeHero extends ConsumerWidget {
   const HomeHero({super.key});
+
   @override
-  Widget build(BuildContext context) => Container(
-    key: const Key('home-hero'),
-    height: MediaQuery.textScalerOf(context).scale(160),
-    clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(8),
-      gradient: const LinearGradient(
-        colors: [Color(0xFFEEFAFB), Color(0xFFD6F4F6)],
-      ),
-    ),
-    child: Stack(
-      children: [
-        const Positioned(
-          right: 10,
-          bottom: -12,
-          child: ExcludeSemantics(
-            child: SizedBox(
-              width: 100,
-              height: 145,
-              child: FittedBox(child: SodamBottle()),
-            ),
-          ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final image = ref.watch(customerStorageImagesProvider).value?.firstOrNull;
+    return Container(
+      key: const Key('home-hero'),
+      height: MediaQuery.textScalerOf(context).scale(160),
+      padding: const EdgeInsets.all(18),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEEFAFB), Color(0xFFD6F4F6)],
         ),
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: FractionallySizedBox(
-            widthFactor: .7,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 6,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -174,15 +62,27 @@ class HomeHero extends StatelessWidget {
                 const SizedBox(height: 8),
                 const Text(
                   '나에게 맞는 아름다움을 만나는 곳',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 10, color: SodamStyle.muted),
                 ),
               ],
             ),
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 4,
+            child: SizedBox(
+              key: const Key('home-hero-product-image'),
+              child: image == null
+                  ? const Icon(Icons.image_outlined, color: SodamStyle.muted)
+                  : CustomerStoragePhoto(image: image, label: '하나 추천 상품 이미지'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class HomeCategoryButton extends StatelessWidget {

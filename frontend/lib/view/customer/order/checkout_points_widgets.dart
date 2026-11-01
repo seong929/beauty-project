@@ -1,3 +1,6 @@
+// 기능: 사용 포인트 입력·전액 사용·포인트 사용 취소.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +25,7 @@ class _CheckoutPointsSectionState extends ConsumerState<CheckoutPointsSection> {
     _sync(ref.read(checkoutPointSummaryProvider).used);
   }
 
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _input.dispose();

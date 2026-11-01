@@ -1,5 +1,9 @@
+// 기능: 상품 리뷰·평균 별점·리뷰 더 보기·편집 연결.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/model/customer/review.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
@@ -66,7 +70,10 @@ class ProductReviewsSection extends ConsumerStatefulWidget {
 }
 
 class _ProductReviewsSectionState extends ConsumerState<ProductReviewsSection> {
-  int _visible = 5;
+  late final _visibleProvider = customerReviewVisibleProvider(this);
+  int get _visible => ref.read(_visibleProvider).value;
+
+  /// Function: 관련 Provider를 무효화해 최신 서버 상태를 다시 조회한다.
   void _refresh() {
     ref.invalidate(productReviewsProvider(widget.product.id));
     ref.invalidate(catalogProductRatingsProvider);
@@ -85,6 +92,7 @@ class _ProductReviewsSectionState extends ConsumerState<ProductReviewsSection> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(_visibleProvider);
     final product = widget.product;
     if (!product.isDatabaseProduct) {
       return const Padding(
@@ -181,7 +189,8 @@ class _ProductReviewsSectionState extends ConsumerState<ProductReviewsSection> {
               if (reviews.length > _visible)
                 TextButton(
                   key: const Key('product-more-reviews'),
-                  onPressed: () => setState(() => _visible += 5),
+                  onPressed: () =>
+                      ref.read(_visibleProvider.notifier).select(_visible + 5),
                   child: Text('리뷰 더 보기 (${reviews.length - _visible}개)'),
                 ),
             ],

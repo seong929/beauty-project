@@ -1,3 +1,6 @@
+// 기능: 상품 표시 정보와 DB 상품·이미지 미리보기 구분.
+// 데이터 모델 계층: Riverpod 의존성을 넣지 않고 데이터와 변환·계산만 제공한다.
+
 import 'cosmetic.dart';
 import 'storage_image.dart';
 
