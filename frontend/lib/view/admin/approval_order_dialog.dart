@@ -21,7 +21,7 @@ class ApprovalOrderDialog extends ConsumerStatefulWidget {
 class _ApprovalOrderDialogState extends ConsumerState<ApprovalOrderDialog> {
   final form = GlobalKey<FormState>();
   late final TextEditingController quantity;
-  final price = TextEditingController();
+  late final TextEditingController price;
   String? manufacturer;
   @override
   void initState() {
@@ -29,6 +29,7 @@ class _ApprovalOrderDialogState extends ConsumerState<ApprovalOrderDialog> {
     quantity = TextEditingController(
       text: widget.approval.requestedQuantity.toString(),
     );
+    price = TextEditingController(text: widget.approval.unitCost ?? '');
   }
 
   @override
@@ -104,8 +105,11 @@ class _ApprovalOrderDialogState extends ConsumerState<ApprovalOrderDialog> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: '개당 공급 단가',
+                    helperText: widget.approval.unitCost == null
+                        ? '등록된 원가가 없습니다. 공급 단가를 입력해 주세요.'
+                        : '화장품 원가를 기본값으로 사용합니다.',
                     suffixText: '원',
                     border: OutlineInputBorder(),
                   ),

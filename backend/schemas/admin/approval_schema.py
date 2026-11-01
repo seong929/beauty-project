@@ -25,6 +25,7 @@ class ApprovalListItem(BaseModel):
     category_id: str | None = None
     cosmetic_name_seq: int | None = None
     volume_text: str | None = None
+    unit_cost: Decimal | None = None
     purchase_order_id: str | None = None
     order_quantity: int | None = None
 

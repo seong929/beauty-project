@@ -35,7 +35,9 @@
 
 하단 탭의 검색·장바구니·내 정보 이동은 `view/customer/customer_navigation.dart`의 공통 함수로 메인과 선택한 탭만 남긴다. 상단 뒤로가기와 Android 뒤로가기 모두 이전 탭 대신 메인으로 돌아간다. 상품 상세·정보 수정 등 탭 내부 화면은 일반적인 뒤로가기를 유지한다.
 
-관리자는 공용 사진이 없거나 깨진 경우 기존 직원 인증 이미지 API로도 확인한다. 이미지 업로드는 기존 관리자 권한, 파일 형식/크기 검사, 덮어쓰기 보호를 유지한다. 서버 기본 설정은 `FIREBASE_STORAGE_BUCKET=beauty-skin-20e94.firebasestorage.app`, `FIREBASE_STORAGE_PROJECT=beauty-skin-20e94`이며 환경변수로 변경할 수 있다. 별도 버킷으로 변경한다면 프런트엔드 설정도 동일하게 맞춰야 한다.
+고객과 관리자는 `view/common/storage_photo.dart`의 동일한 공개 이미지 로더와 표시 위젯을 사용한다. Firebase 목록 조회는 성공해도 개별 파일 응답에 CORS 헤더가 없으면 Chrome의 이미지 바이트 조회가 차단될 수 있다. 웹 로더는 `WebHtmlElementStrategy.fallback`으로 이 경우 HTML 이미지 표시로 전환한다. Android는 기존 네트워크 이미지 로딩 방식을 유지한다. 서버의 조회 성공 로그만으로 브라우저 이미지 표시 성공을 판정하지 않는다.
+
+이미지 업로드는 기존 관리자 권한, 파일 형식/크기 검사, 덮어쓰기 보호를 유지한다. 서버 기본 설정은 `FIREBASE_STORAGE_BUCKET=beauty-skin-20e94.firebasestorage.app`, `FIREBASE_STORAGE_PROJECT=beauty-skin-20e94`이며 환경변수로 변경할 수 있다. 별도 버킷으로 변경한다면 프런트엔드 설정도 동일하게 맞춰야 한다.
 
 ## 로그인 실행 분리
 
@@ -55,5 +57,7 @@ flutter run -t lib/main_delivery.dart
 VS Code 실행 목록에도 `소담 고객`, `소담 관리자`, `소담 배송업체`를 추가했다. 각 앱은 자체 로그인 화면만 제공하며 로그인 유형 선택 화면을 거치지 않는다. 실행 진입점을 바꿀 때는 기존 디버깅을 중지한 뒤 해당 구성을 새로 실행한다. Firebase 프로젝트를 복제하거나 별도 기본 앱을 중복 초기화하지 않는다.
 
 ## 검증
+
+`flutter test --platform chrome --dart-define=RUN_FIREBASE_WEB_TEST=true test/storage_photo_web_test.dart`는 실제 Firebase 파일을 읽어 HTML 이미지 표시와 관리자 위젯 렌더링까지 검증한다. 기본 테스트에서는 외부 네트워크 의존성을 피하기 위해 제외된다. Windows Flutter 3.44.6의 테스트 서버가 `/canvaskit/` 요청에 404를 반환하는 경우에는 CanvasKit 테스트 자산 제공 문제를 먼저 해결해야 한다. 이번 Chrome 검증은 설치된 SDK의 CanvasKit 파일을 테스트 브라우저에 제공해 통과했으며 SDK와 저장소 권한은 변경하지 않았다.
 
 2026-10-30: 실제 버킷의 PNG 30개를 다운로드해 PNG 서명·청크 CRC·압축 데이터를 검증했다. 로컬 검증 파일은 무시되는 `frontend/build/firebase_preview/`에만 저장한다. 자동 테스트는 페이지 처리, 한글·공백·특수문자 URL, 권한·잘못된 응답, 정확/대표 매칭, 상단 10개·전체 30개·확대, 재시도·깨진 사진, 상품번호·가격 유지 동작을 검증한다.

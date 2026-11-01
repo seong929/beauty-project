@@ -18,6 +18,7 @@ class Approval {
   final String? categoryId;
   final int? cosmeticNameSeq;
   final String? volumeText;
+  final String? unitCost;
   final String? purchaseOrderId;
   final int? orderQuantity;
 
@@ -41,6 +42,7 @@ class Approval {
     this.categoryId,
     this.cosmeticNameSeq,
     this.volumeText,
+    this.unitCost,
     this.purchaseOrderId,
     this.orderQuantity,
   });
@@ -68,6 +70,7 @@ class Approval {
       categoryId: json['category_id'] as String?,
       cosmeticNameSeq: json['cosmetic_name_seq'] as int?,
       volumeText: json['volume_text'] as String?,
+      unitCost: json['unit_cost']?.toString(),
       purchaseOrderId: json['purchase_order_id'] as String?,
       orderQuantity: json['order_quantity'] as int?,
     );

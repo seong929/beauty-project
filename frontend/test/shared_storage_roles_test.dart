@@ -171,7 +171,6 @@ void main() {
       const bucket = 'beauty-skin-20e94.firebasestorage.app';
       var version = '1';
       final customerUrls = <String>[];
-      final adminUrls = <String>[];
       final pixel = base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==',
       );
@@ -190,10 +189,6 @@ void main() {
           cosmeticImageProvider.overrideWith((ref, id) async {
             privateReads++;
             return null;
-          }),
-          cosmeticImageLoaderProvider.overrideWithValue((url) {
-            adminUrls.add(url);
-            return MemoryImage(pixel);
           }),
           customerStorageImageLoaderProvider.overrideWithValue((url) {
             customerUrls.add(url);
@@ -231,13 +226,33 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(customerUrls.last, adminUrls.last);
-      expect(Uri.parse(adminUrls.last).queryParameters['v'], '1');
+      expect(
+        identical(
+          cosmeticImageLoaderProvider,
+          customerStorageImageLoaderProvider,
+        ),
+        isTrue,
+      );
+      expect(find.byType(StoragePhoto), findsNWidgets(2));
+      final initialPhotos = tester
+          .widgetList<StoragePhoto>(find.byType(StoragePhoto))
+          .toList();
+      expect(
+        initialPhotos.first.image.downloadUri,
+        initialPhotos.last.image.downloadUri,
+      );
+      expect(Uri.parse(customerUrls.last).queryParameters['v'], '1');
       version = '2';
       container.invalidate(storageImagesProvider);
       await tester.pumpAndSettle();
-      expect(customerUrls.last, adminUrls.last);
-      expect(Uri.parse(adminUrls.last).queryParameters['v'], '2');
+      final refreshedPhotos = tester
+          .widgetList<StoragePhoto>(find.byType(StoragePhoto))
+          .toList();
+      expect(
+        refreshedPhotos.first.image.downloadUri,
+        refreshedPhotos.last.image.downloadUri,
+      );
+      expect(Uri.parse(customerUrls.last).queryParameters['v'], '2');
       expect(privateReads, 0);
       expect(tester.takeException(), isNull);
     },

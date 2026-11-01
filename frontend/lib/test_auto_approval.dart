@@ -1,13 +1,13 @@
-// 단일 파일 자동 품의 기능 검증 UI (Flutter Android Emulator).
+// 단일 파일 자동 품의 기능 검증 UI (Flutter Web / Android Emulator).
 // 실행: flutter run -t lib/test_auto_approval.dart
 // Android Emulator -> host PC: 10.0.2.2; real device needs host LAN IP.
 // Uses existing http dependency. No login / no MVVM / no admin identity.
-// Requires FastAPI AUTO_APPROVAL_TEST_API_ENABLED=1 AND loopback client check.
+// 로컬 서버에서 테스트 API 플래그 없이 조회·수동 실행 가능. 외부 접속은 서버에서 차단한다.
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-const apiBaseUrl = 'http://10.0.2.2:8000';
+const apiBaseUrl = 'http://127.0.0.1:8000';
 const pageSize = 20;
 
 void main() => runApp(const MaterialApp(
@@ -43,7 +43,7 @@ class _AutoApprovalTestPageState extends State<AutoApprovalTestPage> {
       final request = method == 'POST' ? _client.post(uri) : _client.get(uri);
       response = await request.timeout(const Duration(seconds: 30));
     } catch (e) {
-      throw Exception('서버 연결 실패: $e\n확인: Android 에뮬레이터에서는 10.0.2.2:8000');
+      throw Exception('서버 연결 실패: $e\n확인: $apiBaseUrl 서버가 실행 중인지 확인해 주세요.');
     }
     dynamic body;
     try {
@@ -53,6 +53,9 @@ class _AutoApprovalTestPageState extends State<AutoApprovalTestPage> {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = body is Map ? (body['detail'] ?? body).toString() : '$body';
+      if (response.statusCode == 404 && message.contains('테스트 API가 비활성화')) {
+        throw Exception('이전 버전의 서버가 실행 중입니다. 백엔드를 재시작한 후 다시 시도해 주세요.');
+      }
       throw Exception('HTTP ${response.statusCode}: $message');
     }
     return body;

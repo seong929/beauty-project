@@ -1,9 +1,10 @@
-"""DEV-ONLY test endpoints. The actual daily scheduler calls service directly.
+"""Loopback-only development endpoints, independent of the test API flag.
+
+The actual daily scheduler calls service directly.
 
 No staff identity is used to *create* an automatic approval. The existing
 approval_decisions row still names an administrator as future approver.
 """
-import os
 from fastapi import APIRouter, HTTPException, Query, Request
 from database import get_connection
 from services.system.automatic_approval_service import create_automatic_approvals
@@ -13,8 +14,6 @@ router = APIRouter(prefix="/system/automatic-approvals", tags=["시스템 자동
 
 
 def _require_local_test(request: Request) -> None:
-    if os.getenv("AUTO_APPROVAL_TEST_API_ENABLED", "0") != "1":
-        raise HTTPException(status_code=404, detail="테스트 API가 비활성화되어 있습니다.")
     host = request.client.host if request.client else ""
     if host not in ("127.0.0.1", "::1"):
         raise HTTPException(status_code=403, detail="로컬 개발 환경에서만 허용됩니다.")
