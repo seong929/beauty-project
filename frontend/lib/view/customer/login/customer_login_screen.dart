@@ -103,7 +103,8 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
     final isBusy = auth.isLoading;
     final error = auth.hasError ? auth.error.toString() : '';
     return CustomerAuthLayout(
-      title: '하나',
+      // 상단 앱바 제목은 비우고 중앙의 브랜드 문구만 표시한다.
+      title: '',
       padding: const EdgeInsets.fromLTRB(26, 54, 26, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
