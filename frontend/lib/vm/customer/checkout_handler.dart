@@ -1,3 +1,6 @@
+// 기능: 회원 기본 정보와 분리한 이번 주문의 배송 정보.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beauty_project/model/customer/shipping_address.dart';

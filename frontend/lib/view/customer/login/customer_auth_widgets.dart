@@ -1,3 +1,6 @@
+// 기능: 고객 공용 테마와 인증 화면·폼 위젯.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 export '../customer_brand.dart';
 

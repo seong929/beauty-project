@@ -1,7 +1,11 @@
+// 기능: 상품 사진 갤러리·확대 보기·전체 이미지 목록.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/storage_image.dart';
 import 'package:beauty_project/vm/customer/storage_image_handler.dart';
+import 'package:beauty_project/vm/customer/home_recommendation_handler.dart';
 import '../login/customer_auth_widgets.dart';
 import 'storage_product_image.dart';
 
@@ -187,14 +191,14 @@ class HomeProductGallery extends ConsumerWidget {
   const HomeProductGallery({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) => SizedBox(
-    height: 200,
+    height: 168,
     child: _GalleryState(
-      value: ref.watch(customerStorageImagesProvider),
+      value: ref.watch(customerHomeRecommendationsProvider),
       onData: (images) => ListView.separated(
         key: const Key('home-product-images'),
         padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
-        itemCount: images.length.clamp(0, 10),
+        itemCount: images.length,
         separatorBuilder: (_, _) => const SizedBox(width: 14),
         itemBuilder: (_, index) => SizedBox(
           width: 168,
@@ -202,6 +206,7 @@ class HomeProductGallery extends ConsumerWidget {
             image: images[index],
             index: index,
             total: images.length,
+            showCaption: false,
           ),
         ),
       ),
@@ -214,10 +219,12 @@ class _ImageCard extends StatelessWidget {
     required this.image,
     required this.index,
     required this.total,
+    this.showCaption = true,
   });
   final CustomerStorageImage image;
   final int index;
   final int total;
+  final bool showCaption;
   @override
   Widget build(BuildContext context) => Material(
     color: Colors.white,
@@ -230,29 +237,33 @@ class _ImageCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(child: CustomerStoragePhoto(image: image)),
-          Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    image.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: SodamStyle.muted,
+          if (showCaption)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      image.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        color: SodamStyle.muted,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${index + 1} / $total',
-                  style: const TextStyle(fontSize: 9, color: SodamStyle.green),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Text(
+                    '${index + 1} / $total',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: SodamStyle.green,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     ),

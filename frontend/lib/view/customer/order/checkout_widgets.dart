@@ -1,3 +1,6 @@
+// 기능: 결제 단계의 상품·금액·결제 수단·동의 위젯.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import '../customer_brand.dart';
 import 'package:beauty_project/model/customer/cart_item.dart';

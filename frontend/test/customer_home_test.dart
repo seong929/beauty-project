@@ -123,6 +123,10 @@ void main() {
     'home shows sample product photos, names and prices and supports search',
     (tester) async {
       final container = await pumpHome(tester);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('하나')),
+        findsNothing,
+      );
       expect(find.byKey(const Key('home-hero')), findsOneWidget);
       await tester.enterText(find.byKey(const Key('home-search')), '데일리 보습');
       await tester.pumpAndSettle();
@@ -217,6 +221,23 @@ void main() {
     expect(find.text('장바구니가 비어 있어요.'), findsOneWidget);
   });
 
+  testWidgets('home cart button sits beside the filter and opens the cart', (
+    tester,
+  ) async {
+    await pumpHome(tester, size: const Size(320, 568));
+    final filter = tester.getRect(find.byKey(const Key('home-filter')));
+    final cart = tester.getRect(find.byKey(const Key('home-cart')));
+    expect(cart.left, greaterThan(filter.right));
+    expect(cart.center.dy, closeTo(filter.center.dy, 1));
+    expect(find.byType(AppBar), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const Key('home-cart')));
+    await tester.pumpAndSettle();
+    expect(find.text('장바구니가 비어 있어요.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'capture the home screen when a preview directory is configured',
     (tester) async {
@@ -225,6 +246,17 @@ void main() {
       final key = GlobalKey();
       await pumpHome(tester, captureKey: key);
       Future<void> capture(String filename) async {
+        // 테스트에서는 이미지 디코딩 완료 후 캡처해 실제 배너·추천 사진을 확인한다.
+        final providers = tester
+            .widgetList<Image>(find.byType(Image))
+            .map((image) => image.image)
+            .toList();
+        await tester.runAsync(() async {
+          for (final provider in providers) {
+            await precacheImage(provider, key.currentContext!);
+          }
+        });
+        await tester.pumpAndSettle();
         final boundary =
             key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         await tester.runAsync(() async {
@@ -250,7 +282,7 @@ void main() {
   );
 
   testWidgets(
-    'the featured image gallery shows 10 images and supports full size viewing',
+    'the featured image gallery shows 20 images and supports full size viewing',
     (tester) async {
       await pumpHome(tester);
       final firstImage = find.byKey(const Key('uploaded-product-1'));
@@ -260,7 +292,7 @@ void main() {
       await tester.tap(firstImage);
       await tester.pumpAndSettle();
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      expect(find.text('상품 이미지 1 / 30'), findsOneWidget);
+      expect(find.text('상품 이미지 1 / 20'), findsOneWidget);
       expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
       await tester.tap(find.byTooltip('이미지 닫기'));
       await tester.pumpAndSettle();

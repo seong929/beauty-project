@@ -1,14 +1,18 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:beauty_project/model/customer/home_product.dart';
 import 'package:beauty_project/model/customer/storage_image.dart';
 import 'package:beauty_project/service/customer/customer_auth_service.dart';
 import 'package:beauty_project/service/customer/customer_storage_service.dart';
 import 'package:beauty_project/view/customer/home/home_product_gallery.dart';
+import 'package:beauty_project/view/customer/home/home_widgets.dart';
 import 'package:beauty_project/view/customer/home/storage_product_image.dart';
 import 'package:beauty_project/view/customer/login/customer_auth_widgets.dart';
 import 'package:beauty_project/view/customer/product/product_widgets.dart';
 import 'package:beauty_project/vm/customer/storage_image_handler.dart';
+import 'package:beauty_project/vm/customer/home_recommendation_handler.dart';
+import 'package:beauty_project/vm/customer/product_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -147,8 +151,110 @@ void main() {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==',
   );
 
+  test(
+    'recommendations select twenty unique photos without changing the shared source and stay stable until refresh',
+    () async {
+      final source = [
+        for (var i = 0; i < 30; i++)
+          CustomerStorageImage(bucket: bucket, objectName: 'photo_$i.png'),
+      ];
+      final originalOrder = source.map((image) => image.objectName).toList();
+      final scope = ProviderContainer(
+        overrides: [
+          customerStorageImagesProvider.overrideWith((ref) async => source),
+          customerRecommendationRandomProvider.overrideWithValue(Random(42)),
+        ],
+      );
+      addTearDown(scope.dispose);
+      final subscription = scope.listen(
+        customerHomeRecommendationsProvider,
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      await scope.read(customerStorageImagesProvider.future);
+      final first = scope.read(customerHomeRecommendationsProvider).value!;
+      expect(first.length, 20);
+      expect(first.map((image) => image.objectName).toSet().length, 20);
+      expect(source, containsAll(first));
+      expect(source.map((image) => image.objectName), originalOrder);
+      scope.read(productFilterProvider.notifier).search('test');
+      expect(
+        identical(scope.read(customerHomeRecommendationsProvider).value, first),
+        isTrue,
+      );
+      scope.invalidate(customerStorageImagesProvider);
+      await scope.read(customerStorageImagesProvider.future);
+      final second = scope.read(customerHomeRecommendationsProvider).value!;
+      expect(second.length, 20);
+      expect(
+        second.map((image) => image.objectName),
+        isNot(first.map((image) => image.objectName)),
+      );
+      expect(source.map((image) => image.objectName), originalOrder);
+    },
+  );
+
+  test(
+    'recommendations handle fewer than twenty images and an empty catalog',
+    () async {
+      for (final source in [images, <CustomerStorageImage>[]]) {
+        final scope = ProviderContainer(
+          overrides: [
+            customerStorageImagesProvider.overrideWith((ref) async => source),
+          ],
+        );
+        final subscription = scope.listen(
+          customerHomeRecommendationsProvider,
+          (_, _) {},
+        );
+        try {
+          await scope.read(customerStorageImagesProvider.future);
+          final selected = scope
+              .read(customerHomeRecommendationsProvider)
+              .value!;
+          expect(selected, unorderedEquals(source));
+        } finally {
+          subscription.close();
+          scope.dispose();
+        }
+      }
+    },
+  );
+
+  testWidgets('home banner uses a registered photo and fits a narrow screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          customerStorageImagesProvider.overrideWith((ref) async => images),
+          customerStorageImageLoaderProvider.overrideWithValue(
+            (_) => MemoryImage(pixel),
+          ),
+        ],
+        child: MaterialApp(
+          theme: SodamStyle.theme,
+          home: const Scaffold(body: HomeHero()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('home-hero-product-image')),
+        matching: find.byKey(ValueKey(images.first.downloadUri.toString())),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
-    'gallery displays ten remote images, all thirty in full view and opens zoom',
+    'gallery displays twenty random photos without captions and all thirty in full view',
     (tester) async {
       final gallery = [
         for (var i = 0; i < 30; i++)
@@ -186,12 +292,19 @@ void main() {
             .widget<ListView>(find.byKey(const Key('home-product-images')))
             .childrenDelegate
             .estimatedChildCount,
-        19,
+        39,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('home-product-images')),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
       );
       await tester.tap(find.byKey(const Key('uploaded-product-1')));
       await tester.pumpAndSettle();
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      expect(find.text('상품 이미지 1 / 30'), findsOneWidget);
+      expect(find.text('상품 이미지 1 / 20'), findsOneWidget);
       await tester.tap(find.byTooltip('이미지 닫기'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('전체 보기'));

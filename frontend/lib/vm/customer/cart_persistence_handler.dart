@@ -1,3 +1,6 @@
+// 기능: 장바구니 API 저장·재조회와 중복 요청 방지.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +23,7 @@ final customerCartServiceProvider = Provider<CustomerCartService>(
 );
 
 class CartPersistenceHandler extends AsyncNotifier<void> {
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   FutureOr<void> build() {}
 

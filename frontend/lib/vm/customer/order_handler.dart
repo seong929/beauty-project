@@ -1,3 +1,6 @@
+// 기능: 구매 내역 조회와 재고·포인트를 반영한 결제 요청.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beauty_project/model/customer/order.dart';
 import 'package:beauty_project/service/customer/customer_auth_service.dart';
@@ -35,6 +38,7 @@ class CustomerPaymentHandler extends AsyncNotifier<CustomerOrder?> {
   bool _reviewRequired = false;
   bool get reviewRequired => _reviewRequired;
 
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   CustomerOrder? build() {
     ref.watch(

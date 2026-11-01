@@ -1,5 +1,9 @@
+// 기능: 리뷰 별점·내용 편집과 등록·수정 요청.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:beauty_project/vm/customer/state/customer_screen_handler.dart';
 import 'package:beauty_project/model/customer/review.dart';
 import 'package:beauty_project/vm/customer/customer_handler.dart';
 import 'package:beauty_project/vm/customer/product_handler.dart';
@@ -28,7 +32,14 @@ class _CustomerReviewEditorScreenState
   late final _content = TextEditingController(
     text: widget.review?.content ?? '',
   );
-  late int _rating = widget.review?.rating ?? 0;
+  late final _draftProvider = customerReviewDraftProvider((
+    screen: this,
+    rating: widget.review?.rating ?? 0,
+    content: widget.review?.content ?? '',
+  ));
+  int get _rating => ref.read(_draftProvider).rating;
+
+  /// Function: 입력·포커스·스크롤 등 화면이 소유한 자원을 해제한다. Provider는 autoDispose 규칙을 따른다.
   @override
   void dispose() {
     _content.dispose();
@@ -54,7 +65,7 @@ class _CustomerReviewEditorScreenState
         .read(reviewMutationProvider.notifier)
         .save(
           productId: widget.productId,
-          content: _content.text,
+          content: ref.read(_draftProvider).content,
           rating: _rating,
           review: widget.review,
         );
@@ -63,6 +74,7 @@ class _CustomerReviewEditorScreenState
 
   @override
   Widget build(BuildContext context) {
+    final draft = ref.watch(_draftProvider);
     final customerId = ref.watch(customerHandlerProvider).value?.customerId;
     final eligibility = widget.review == null
         ? ref.watch(eligibleReviewProductsProvider)
@@ -80,7 +92,10 @@ class _CustomerReviewEditorScreenState
             : widget.review!.customerId == customerId);
     final busy = mutation.isLoading;
     final canSave =
-        allowed && !busy && _rating >= 1 && _content.text.trim().isNotEmpty;
+        allowed &&
+        !busy &&
+        draft.rating >= 1 &&
+        draft.content.trim().isNotEmpty;
     return PopScope(
       canPop: !busy,
       child: AbsorbPointer(
@@ -125,7 +140,8 @@ class _CustomerReviewEditorScreenState
                         IconButton(
                           key: Key('review-rating-$score'),
                           tooltip: '$score점',
-                          onPressed: () => setState(() => _rating = score),
+                          onPressed: () =>
+                              ref.read(_draftProvider.notifier).rate(score),
                           icon: Icon(
                             _rating >= score ? Icons.star : Icons.star_border,
                             size: 32,
@@ -152,7 +168,8 @@ class _CustomerReviewEditorScreenState
                       minLines: 5,
                       maxLines: 10,
                       maxLength: 2000,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (value) =>
+                          ref.read(_draftProvider.notifier).editContent(value),
                       decoration: const InputDecoration(
                         labelText: '리뷰 내용',
                         hintText: '사용해 본 경험을 알려주세요.',

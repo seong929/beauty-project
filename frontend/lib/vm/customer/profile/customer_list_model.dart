@@ -1,3 +1,6 @@
+// 기능: 고객 목록의 조회·등록·수정·삭제 결과 관리.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beauty_project/model/customer/customers.dart';
@@ -10,6 +13,7 @@ class CustomerListModel extends AsyncNotifier<List<Customers>> {
   List<Customers> _customers = const [];
   List<Customers> get customers => _customers;
 
+  /// Function: Provider가 처음 구독될 때 초기 상태 또는 초기 조회 결과를 준비한다.
   @override
   Future<List<Customers>> build() async {
     final customers = await ref.watch(customerServiceProvider).fetchCustomers();

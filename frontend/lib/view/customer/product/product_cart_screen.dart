@@ -1,3 +1,6 @@
+// 기능: 장바구니 선택·상품 삭제·결제 이동.
+// 표시 계층: ref.watch로 상태를 구독하고 사용자 동작은 Notifier·서비스에 전달한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

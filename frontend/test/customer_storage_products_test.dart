@@ -17,6 +17,7 @@ import 'package:beauty_project/vm/customer/storage_product_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'support/preview_catalog.dart';
@@ -41,6 +42,7 @@ class _SignedIn extends CustomerHandler {
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   test(
     'Firebase cards contain only uploaded skin, lotion and cream products',
     () {

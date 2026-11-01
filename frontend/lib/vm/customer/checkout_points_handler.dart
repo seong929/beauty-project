@@ -1,3 +1,6 @@
+// 기능: 포인트 사용액·전액 사용·결제 잔액 계산.
+// 상태 계층: 변경은 Notifier/AsyncNotifier에서 발행하고 View는 watch, 동작은 read로 연결한다.
+
 import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'cart_handler.dart';
